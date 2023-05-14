@@ -2,75 +2,86 @@ const std = @import("std");
 const zap = @import("zap");
 const Endpoint = @import("user_endpoint.zig");
 
+const Method = enum {
+    DELETE,
+    GET,
+    PATCH,
+    POST,
+    PUT,
+};
+
+const DispatchHttpRequestFn = *const fn (std.mem.Allocator, zap.SimpleRequest) anyerror!void;
+
+fn setupRoutes(a: std.mem.Allocator) !void {
+    routes = std.StringHashMap(DispatchHttpRequestFn).init(a);
+    try routes.put("/auth", auth);
+    try routes.put("/", index);
+}
+
+var routes: std.StringHashMap(DispatchHttpRequestFn) = undefined;
+
+var gpa = std.heap.GeneralPurposeAllocator(.{
+    .thread_safe = true,
+}){};
+var allocator = gpa.allocator();
+
 fn dispatchRoutes(r: zap.SimpleRequest) void {
     std.debug.print("in dispatch:\n", .{});
-    if (r.query) |the_query| {
-        std.debug.print("QUERY: {s}\n", .{the_query});
+    if (r.query) |query| {
+        std.debug.print("QUERY: {s}\n", .{query});
     }
 
-    if (r.path) |the_path| {
-        std.debug.print("PATH: {s}\n", .{the_path});
-
-        if (std.mem.eql(u8, the_path, "/auth")) {
-            var gpa = std.heap.GeneralPurposeAllocator(.{
-                .thread_safe = true,
-            }){};
-            const allocator = gpa.allocator();
-
-            const file = std.fs.cwd().openFile(
-                "web/templates/auth.html",
-                .{},
-            ) catch |err| {
-                std.debug.print("Error opening template: {}\n", .{err});
-                return;
+    if (r.path) |path| {
+        std.debug.print("PATH: {s}\n", .{path});
+        if (routes.get(path)) |handler| {
+            handler(allocator, r) catch |err| {
+                const error_html = std.fmt.allocPrint(allocator, "<html><body><pre>{}</pre></body></html>", .{err}) catch return;
+                defer allocator.free(error_html);
+                r.sendBody(error_html) catch return;
             };
-            defer file.close();
-
-            const stat = file.stat() catch |err| {
-                std.debug.print("Error getting template file size: {}\n", .{err});
-                return;
-            };
-
-            const template = file.reader().readAllAlloc(allocator, stat.size) catch |err| {
-                std.debug.print("Error reading template: {}\n", .{err});
-                return;
-            };
-            const p = zap.MustacheNew(template) catch return;
-            defer zap.MustacheFree(p);
-            const ret = zap.MustacheBuild(p, .{
-                .name = "Test",
-            });
-            defer ret.deinit();
-            if (r.setContentType(.HTML)) {
-                if (ret.str()) |s| {
-                    r.sendBody(s) catch return;
-                } else {
-                    r.sendBody("<html><body><h1>MustacheBuild() failed!</h1></body></html>") catch return;
-                }
-            } else |err| {
-                std.debug.print("Error while setting content type: {}\n", .{err});
-            }
+            return;
         }
     }
 
     r.sendBody("<html><body><h1>Oops!</h1></body></html>") catch return;
 }
 
+fn auth(a: std.mem.Allocator, r: zap.SimpleRequest) !void {
+    return render(a, r, "web/templates/auth.html", .{});
+}
+
+fn index(a: std.mem.Allocator, r: zap.SimpleRequest) !void {
+    return render(a, r, "web/templates/index.html", .{});
+}
+
+fn render(a: std.mem.Allocator, r: zap.SimpleRequest, t: []const u8, m: anytype) !void {
+    const file = try std.fs.cwd().openFile(
+        t,
+        .{},
+    );
+    defer file.close();
+
+    const size = (try file.stat()).size;
+
+    const template = try file.reader().readAllAlloc(a, size);
+
+    const p = try zap.MustacheNew(template);
+    defer zap.MustacheFree(p);
+    const ret = zap.MustacheBuild(p, m);
+    defer ret.deinit();
+    if (r.setContentType(.HTML)) {
+        if (ret.str()) |resp| {
+            try r.sendBody(resp);
+        } else {
+            try r.sendBody("<html><body><h1>MustacheBuild() failed!</h1></body></html>");
+        }
+    } else |err| return err;
+    return;
+}
+
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{
-        .thread_safe = true,
-    }){};
-    var allocator = gpa.allocator();
-
-    //try setupRoutes(allocator);
-
-    //var listener = zap.SimpleHttpListener.init(.{
-    //    .port = 3000,
-    //    .on_request = dispatchRoutes,
-    //    .public_folder = "public",
-    //    .log = true,
-    //    .max_clients = 100000,
-    //});
+    // setup routes
+    try setupRoutes(allocator);
 
     // setup listener
     var listener = zap.SimpleEndpointListener.init(
