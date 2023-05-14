@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/img/favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="/img/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/img/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <title>Beachglass TV</title>
+    <script src="https://unpkg.com/htmx.org@1.9.2" integrity="sha384-L6OqL9pRWyyFU3+/bjdSri+iIphTN/bvYyM37tICVyOJkWZLpP2vGn6VUEXgzg6h" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/alpinejs" defer></script>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <div class="flex items-center h-full justify-center">
+        <div class="flex flex-col">
+            <h1 class="text-3xl md:text-6xl text-white text-center">Who&#39;s watching?</h1>
+            <div class="flex items-center justify-center gap-8 mt-10">
+                <div @click="location.href='/'" x-data>
+                  <div class="group flex-row w-44 mx-auto">
+                      <div class="w-44 h-44 rounded-md flex items-center justify-center border-2 border-transparent group-hover:cursor-pointer group-hover:border-white overflow-hidden">
+                        <img draggable="false" class="w-max h-max object-contain" src={{avatar}} alt="Profile">
+                      </div>
+                      <div class="mt-4 text-gray-400 text-2xl text-center group-hover:text-white">
+                        {{name}}
+                      </div>
+                  </div>
+                </div>
+            </div>
+        </div>
+    </div>
+  </body>
+</html>
+

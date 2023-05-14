@@ -1,0 +1,15 @@
+{
+  "name": "beachtube",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "serve": "zig-out/bin/beachtube",
+    "dev-css": "npm run build-css -- --watch",
+    "build-css": "npx tailwindcss build -i src/css/main.css -o public/style.css",
+    "dev": "npm run build-css && npm run serve"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.3.2"
+  }
+}

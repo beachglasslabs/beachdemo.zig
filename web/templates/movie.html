@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/img/favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="/img/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/img/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <title>Beachglass TV</title>
+    <script src="https://unpkg.com/htmx.org@1.9.2" integrity="sha384-L6OqL9pRWyyFU3+/bjdSri+iIphTN/bvYyM37tICVyOJkWZLpP2vGn6VUEXgzg6h" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/alpinejs" defer></script>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <div class="h-screen w-screen bg-black" x-data="{ movie: {} }" x-init="movie = await (await fetch('/movies/{{id}}')).json()">
+      <nav class="fixed w-full p-4 z-10 flex flex-row items-center gap-8 bg-black bg-opacity-70">
+        <div @click="location.href='/'" class="text-white cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+          </svg>
+        </div>
+        <p class="text-white text-1xl md:text-3xl font-bold">
+          <span class="font-light">
+            Watching:
+          </span>
+          <span x-text="movie.title"></span>
+        </p>
+      </nav>
+      <video autoPlay controls class="h-full w-full" :src="movie.videoUrl"></video>
+    </div>
+  </body>
+</html>
+
