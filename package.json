@@ -4,9 +4,10 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "serve": "zig-out/bin/beachtube",
+    "serve": "npm run build && zig-out/bin/beachtube",
     "dev-css": "npm run build-css -- --watch",
-    "build-css": "npx tailwindcss build -i src/css/main.css -o public/style.css",
+    "build-css": "npx tailwindcss build -i web/css/main.css -o public/style.css",
+    "build": "zig build",
     "dev": "npm run build-css && npm run serve"
   },
   "devDependencies": {
