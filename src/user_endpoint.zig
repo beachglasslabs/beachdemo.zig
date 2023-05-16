@@ -85,7 +85,7 @@ fn postUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
         var maybe_user: ?User = std.json.parse(User, &stream, .{ .allocator = self.alloc }) catch null;
         if (maybe_user) |u| {
             defer std.json.parseFree(User, u, .{ .allocator = self.alloc });
-            if (self.users.addByName(u.first_name, u.last_name)) |id| {
+            if (self.users.add(u.name, u.email, u.password)) |id| {
                 var jsonbuf: [128]u8 = undefined;
                 if (zap.stringifyBuf(&jsonbuf, .{ .status = "OK", .id = id }, .{})) |json| {
                     r.sendJson(json) catch return;
@@ -109,7 +109,7 @@ fn putUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
                     if (maybe_user) |u| {
                         defer std.json.parseFree(User, u, .{ .allocator = self.alloc });
                         var jsonbuf: [128]u8 = undefined;
-                        if (self.users.update(id, u.first_name, u.last_name)) {
+                        if (self.users.update(id, u.name, u.email, u.password)) {
                             if (zap.stringifyBuf(&jsonbuf, .{ .status = "OK", .id = id }, .{})) |json| {
                                 r.sendJson(json) catch return;
                             }

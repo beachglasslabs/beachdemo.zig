@@ -9,16 +9,19 @@ pub const Self = @This();
 
 const InternalUser = struct {
     id: usize = 0,
-    firstnamebuf: [64]u8,
-    firstnamelen: usize,
-    lastnamebuf: [64]u8,
-    lastnamelen: usize,
+    namebuf: [64]u8,
+    namelen: usize,
+    mailbuf: [64]u8,
+    maillen: usize,
+    passbuf: [64]u8,
+    passlen: usize,
 };
 
 pub const User = struct {
     id: usize = 0,
-    first_name: []const u8,
-    last_name: []const u8,
+    name: []const u8,
+    email: []const u8,
+    password: []const u8,
 };
 
 pub fn init(a: std.mem.Allocator) Self {
@@ -35,19 +38,25 @@ pub fn deinit(self: *Self) void {
 
 // the request will be freed (and its mem reused by facilio) when it's
 // completed, so we take copies of the names
-pub fn addByName(self: *Self, first: ?[]const u8, last: ?[]const u8) !usize {
+pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8) !usize {
     var user: InternalUser = undefined;
-    user.firstnamelen = 0;
-    user.lastnamelen = 0;
+    user.namelen = 0;
+    user.maillen = 0;
+    user.passlen = 0;
 
-    if (first) |firstname| {
-        std.mem.copy(u8, user.firstnamebuf[0..], firstname);
-        user.firstnamelen = firstname.len;
+    if (name) |username| {
+        std.mem.copy(u8, user.namebuf[0..], username);
+        user.namelen = username.len;
     }
 
-    if (last) |lastname| {
-        std.mem.copy(u8, user.lastnamebuf[0..], lastname);
-        user.lastnamelen = lastname.len;
+    if (mail) |usermail| {
+        std.mem.copy(u8, user.mailbuf[0..], usermail);
+        user.maillen = usermail.len;
+    }
+
+    if (pass) |userpass| {
+        std.mem.copy(u8, user.passbuf[0..], userpass);
+        user.passlen = userpass.len;
     }
 
     // We lock only on insertion, deletion, and listing
@@ -58,7 +67,7 @@ pub fn addByName(self: *Self, first: ?[]const u8, last: ?[]const u8) !usize {
         self.count += 1;
         return user.id;
     } else |err| {
-        std.debug.print("addByName error: {}\n", .{err});
+        std.debug.print("add error: {}\n", .{err});
         // make sure we pass on the error
         return err;
     }
@@ -82,8 +91,9 @@ pub fn get(self: *Self, id: usize) ?User {
     if (self.users.getPtr(id)) |pUser| {
         return .{
             .id = pUser.id,
-            .first_name = pUser.firstnamebuf[0..pUser.firstnamelen],
-            .last_name = pUser.lastnamebuf[0..pUser.lastnamelen],
+            .name = pUser.namebuf[0..pUser.namelen],
+            .email = pUser.mailbuf[0..pUser.maillen],
+            .password = pUser.passbuf[0..pUser.passlen],
         };
     }
     return null;
@@ -92,21 +102,24 @@ pub fn get(self: *Self, id: usize) ?User {
 pub fn update(
     self: *Self,
     id: usize,
-    first: ?[]const u8,
-    last: ?[]const u8,
+    name: ?[]const u8,
+    mail: ?[]const u8,
+    pass: ?[]const u8,
 ) bool {
     // we don't care about locking here
     // we update in-place, via getPtr
     if (self.users.getPtr(id)) |pUser| {
-        pUser.firstnamelen = 0;
-        pUser.lastnamelen = 0;
-        if (first) |firstname| {
-            std.mem.copy(u8, pUser.firstnamebuf[0..], firstname);
-            pUser.firstnamelen = firstname.len;
+        if (name) |username| {
+            std.mem.copy(u8, pUser.namebuf[0..], username);
+            pUser.namelen = username.len;
         }
-        if (last) |lastname| {
-            std.mem.copy(u8, pUser.lastnamebuf[0..], lastname);
-            pUser.lastnamelen = lastname.len;
+        if (mail) |usermail| {
+            std.mem.copy(u8, pUser.mailbuf[0..], usermail);
+            pUser.maillen = usermail.len;
+        }
+        if (pass) |userpass| {
+            std.mem.copy(u8, pUser.passbuf[0..], userpass);
+            pUser.passlen = userpass.len;
         }
     }
     return false;
@@ -189,14 +202,18 @@ const JsonUserIteratorWithRaceCondition = struct {
             var user: User = .{
                 // we don't need .* syntax but want to make it obvious
                 .id = pUser.*.id,
-                .first_name = pUser.*.firstnamebuf[0..pUser.*.firstnamelen],
-                .last_name = pUser.*.lastnamebuf[0..pUser.*.lastnamelen],
+                .name = pUser.*.namebuf[0..pUser.*.namelen],
+                .email = pUser.*.mailbuf[0..pUser.*.maillen],
+                .password = pUser.*.passbuf[0..pUser.*.passlen],
             };
-            if (pUser.*.firstnamelen == 0) {
-                user.first_name = "";
+            if (pUser.*.namelen == 0) {
+                user.name = "";
             }
-            if (pUser.*.lastnamelen == 0) {
-                user.last_name = "";
+            if (pUser.*.maillen == 0) {
+                user.email = "";
+            }
+            if (pUser.*.passlen == 0) {
+                user.password = "";
             }
             return user;
         }
