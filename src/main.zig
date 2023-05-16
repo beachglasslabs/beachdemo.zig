@@ -1,6 +1,7 @@
 const std = @import("std");
 const zap = @import("zap");
-const Endpoint = @import("user_endpoint.zig");
+const UserEndpoint = @import("user_endpoint.zig");
+const SessionEndpoint = @import("session_endpoint.zig");
 
 const Method = enum {
     DELETE,
@@ -97,11 +98,11 @@ pub fn main() !void {
     );
     defer listener.deinit();
 
-    var user_endpoint = Endpoint.init(allocator, "/users");
+    var user_endpoint = UserEndpoint.init(allocator, "/users");
     defer user_endpoint.deinit();
 
-    var session_endpoint = Endpoint.init(allocator, "/sessions");
-    session_endpoint.deinit();
+    var session_endpoint = SessionEndpoint.init(allocator, "/sessions");
+    defer session_endpoint.deinit();
 
     // add endpoints
     try listener.addEndpoint(user_endpoint.getEndpoint());
