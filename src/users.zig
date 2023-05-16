@@ -1,7 +1,8 @@
 const std = @import("std");
 
 alloc: std.mem.Allocator = undefined,
-users: std.AutoHashMap(usize, InternalUser) = undefined,
+users_by_id: std.AutoHashMap(usize, InternalUser) = undefined,
+users_by_email: std.StringHashMap(InternalUser) = undefined,
 lock: std.Thread.Mutex = undefined,
 count: usize = 0,
 
@@ -27,13 +28,15 @@ pub const User = struct {
 pub fn init(a: std.mem.Allocator) Self {
     return .{
         .alloc = a,
-        .users = std.AutoHashMap(usize, InternalUser).init(a),
+        .users_by_id = std.AutoHashMap(usize, InternalUser).init(a),
+        .users_by_email = std.StringHashMap(InternalUser).init(a),
         .lock = std.Thread.Mutex{},
     };
 }
 
 pub fn deinit(self: *Self) void {
-    self.users.deinit();
+    self.users_by_email.deinit();
+    self.users_by_id.deinit();
 }
 
 // the request will be freed (and its mem reused by facilio) when it's
@@ -63,7 +66,12 @@ pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8)
     self.lock.lock();
     defer self.lock.unlock();
     user.id = self.count + 1;
-    if (self.users.put(user.id, user)) {
+    self.users_by_email.put(&user.mailbuf, user) catch |err| {
+        std.debug.print("add error: {}\n", .{err});
+        // make sure we pass on the error
+        return err;
+    };
+    if (self.users_by_id.put(user.id, user)) {
         self.count += 1;
         return user.id;
     } else |err| {
@@ -78,7 +86,8 @@ pub fn delete(self: *Self, id: usize) bool {
     self.lock.lock();
     defer self.lock.unlock();
 
-    const ret = self.users.remove(id);
+    const user = self.users_by_id.fetchRemove(id).?.value;
+    var ret = self.users_by_email.remove(&user.mailbuf);
     if (ret) {
         self.count -= 1;
     }
@@ -88,7 +97,7 @@ pub fn delete(self: *Self, id: usize) bool {
 pub fn get(self: *Self, id: usize) ?User {
     // we don't care about locking here, as our usage-pattern is unlikely to
     // get a user by id that is not known yet
-    if (self.users.getPtr(id)) |pUser| {
+    if (self.users_by_id.getPtr(id)) |pUser| {
         return .{
             .id = pUser.id,
             .name = pUser.namebuf[0..pUser.namelen],
@@ -108,7 +117,7 @@ pub fn update(
 ) bool {
     // we don't care about locking here
     // we update in-place, via getPtr
-    if (self.users.getPtr(id)) |pUser| {
+    if (self.users_by_id.getPtr(id)) |pUser| {
         if (name) |username| {
             std.mem.copy(u8, pUser.namebuf[0..], username);
             pUser.namelen = username.len;
@@ -138,11 +147,12 @@ pub fn toJSON(self: *Self) ![]const u8 {
     defer l.deinit();
 
     // the potential race condition is fixed by jsonifying with the mutex locked
-    var it = JsonUserIteratorWithRaceCondition.init(&self.users);
+    var it = JsonUserIteratorWithRaceCondition.init(&self.users_by_id);
     while (it.next()) |user| {
         try l.append(user);
     }
-    std.debug.assert(self.users.count() == l.items.len);
+    std.debug.assert(self.users_by_id.count() == l.items.len);
+    std.debug.assert(self.users_by_email.count() == l.items.len);
     std.debug.assert(self.count == l.items.len);
     return std.json.stringifyAlloc(self.alloc, l.items, .{});
 }
@@ -172,11 +182,11 @@ pub fn listWithRaceCondition(self: *Self, out: *std.ArrayList(User)) !void {
     // - or: the iterator must make copies of the strings
     self.lock.lock();
     defer self.lock.unlock();
-    var it = JsonUserIteratorWithRaceCondition.init(&self.users);
+    var it = JsonUserIteratorWithRaceCondition.init(&self.users_by_id);
     while (it.next()) |user| {
         try out.append(user);
     }
-    std.debug.assert(self.users.count() == out.items.len);
+    std.debug.assert(self.users_by_id.count() == out.items.len);
     std.debug.assert(self.count == out.items.len);
 }
 

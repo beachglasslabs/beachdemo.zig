@@ -21,8 +21,9 @@ pub fn init(
         .endpoint = zap.SimpleEndpoint.init(.{
             .path = user_path,
             .get = getUser,
-            .post = postUser,
-            .put = putUser,
+            .post = addUser,
+            .put = updateUser,
+            //.patch = updateUser,
             .delete = deleteUser,
         }),
     };
@@ -78,9 +79,10 @@ fn listUsers(self: *Self, r: zap.SimpleRequest) void {
     }
 }
 
-fn postUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
+fn addUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     const self = @fieldParentPtr(Self, "endpoint", e);
     if (r.body) |body| {
+        std.debug.print("input {s}\n", .{body});
         var stream = std.json.TokenStream.init(body);
         var maybe_user: ?User = std.json.parse(User, &stream, .{ .allocator = self.alloc }) catch null;
         if (maybe_user) |u| {
@@ -96,9 +98,11 @@ fn postUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
             }
         }
     }
+    const json = self.users.toJSON() catch return;
+    std.debug.print("users: {s}\n", .{json});
 }
 
-fn putUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
+fn updateUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     const self = @fieldParentPtr(Self, "endpoint", e);
     if (r.path) |path| {
         if (self.userIdFromPath(path)) |id| {

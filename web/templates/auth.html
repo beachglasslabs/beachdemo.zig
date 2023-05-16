@@ -27,7 +27,7 @@
                     message: '',
                     login: true,
                     getUrl() {
-                      return url = 'http://localhost:3000/' + (this.login ? 'login' : 'register')
+                      return url = 'http://localhost:3000/' + (this.login ? 'sessions' : 'users')
                     },
                     inputs: [ { id: 'name', name: 'name', type: 'text', label: 'Name' , value: '' },
                               { id: 'email', name: 'email', type: 'email', label: 'Email address or phone number', value: '' },
