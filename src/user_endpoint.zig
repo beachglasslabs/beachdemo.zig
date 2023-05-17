@@ -81,23 +81,70 @@ fn listUsers(self: *Self, r: zap.SimpleRequest) void {
 
 fn addUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     const self = @fieldParentPtr(Self, "endpoint", e);
-    if (r.body) |body| {
-        std.debug.print("input {s}\n", .{body});
-        var stream = std.json.TokenStream.init(body);
-        var maybe_user: ?User = std.json.parse(User, &stream, .{ .allocator = self.alloc }) catch null;
-        if (maybe_user) |u| {
-            defer std.json.parseFree(User, u, .{ .allocator = self.alloc });
-            if (self.users.add(u.name, u.email, u.password)) |id| {
-                var jsonbuf: [128]u8 = undefined;
-                if (zap.stringifyBuf(&jsonbuf, .{ .status = "OK", .id = id }, .{})) |json| {
-                    r.sendJson(json) catch return;
-                }
-            } else |err| {
-                std.debug.print("ADDING error: {}\n", .{err});
-                return;
-            }
+
+    // check for FORM parameters
+    r.parseBody() catch |err| {
+        std.log.err("Parse Body error: {any}. Expected if body is empty", .{err});
+    };
+
+    // check for query parameters
+    r.parseQuery();
+
+    var param_count = r.getParamCount();
+    std.log.info("param_count: {}", .{param_count});
+
+    var name = std.mem.zeroes([64]u8);
+    var email = std.mem.zeroes([64]u8);
+    var password = std.mem.zeroes([64]u8);
+
+    if (r.getParamStr("name", self.alloc, false)) |maybe_str| {
+        if (maybe_str) |*s| {
+            defer s.deinit();
+
+            std.mem.copy(u8, name[0..], s.str);
+            std.log.info("Param name = {s}", .{s.str});
+        } else {
+            std.log.info("Param name not found!", .{});
         }
+    } else |err| {
+        std.log.err("cannot check for `name` param: {any}\n", .{err});
     }
+
+    if (r.getParamStr("email", self.alloc, false)) |maybe_str| {
+        if (maybe_str) |*s| {
+            defer s.deinit();
+
+            std.mem.copy(u8, email[0..], s.str);
+            std.log.info("Param email = {s}", .{s.str});
+        } else {
+            std.log.info("Param email not found!", .{});
+        }
+    } else |err| {
+        std.log.err("cannot check for `email` param: {any}\n", .{err});
+    }
+
+    if (r.getParamStr("password", self.alloc, false)) |maybe_str| {
+        if (maybe_str) |*s| {
+            defer s.deinit();
+
+            std.mem.copy(u8, password[0..], s.str);
+            std.log.info("Param password = {s}", .{s.str});
+        } else {
+            std.log.info("Param password not found!", .{});
+        }
+    } else |err| {
+        std.log.err("cannot check for `password` param: {any}\n", .{err});
+    }
+
+    std.debug.print("name={s}, email={s}, password={s}\n", .{ name, email, password });
+
+    if (self.users.add(&name, &email, &password)) |id| {
+        std.debug.print("{s} logged in as user {d}", .{ email, id });
+    } else |err| {
+        std.debug.print("ADDING error: {}\n", .{err});
+        return;
+    }
+
     const json = self.users.toJSON() catch return;
     std.debug.print("users: {s}\n", .{json});
 }
