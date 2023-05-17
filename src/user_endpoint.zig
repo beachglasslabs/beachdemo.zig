@@ -92,55 +92,33 @@ fn addUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     r.parseQuery();
 
     var param_count = r.getParamCount();
-    std.log.info("param_count: {}", .{param_count});
+    std.log.info("param count: {}", .{param_count});
 
-    var name = std.mem.zeroes([64]u8);
-    var email = std.mem.zeroes([64]u8);
-    var password = std.mem.zeroes([64]u8);
+    var name: ?[]const u8 = null;
+    var email: ?[]const u8 = null;
+    var password: ?[]const u8 = null;
 
-    if (r.getParamStr("name", self.alloc, false)) |maybe_str| {
-        if (maybe_str) |*s| {
-            defer s.deinit();
-
-            std.mem.copy(u8, name[0..], s.str);
-            std.log.info("Param name = {s}", .{s.str});
-        } else {
-            std.log.info("Param name not found!", .{});
+    var strparams = r.parametersToOwnedStrList(self.alloc, false) catch unreachable;
+    defer strparams.deinit();
+    std.debug.print("\n", .{});
+    for (strparams.items) |kv| {
+        std.log.info("ParamStr `{s}` is `{s}`", .{ kv.key.str, kv.value.str });
+        if (std.mem.eql(u8, "name", kv.key.str)) {
+            name = kv.value.str;
         }
-    } else |err| {
-        std.log.err("cannot check for `name` param: {any}\n", .{err});
+        if (std.mem.eql(u8, "email", kv.key.str)) {
+            email = kv.value.str;
+        }
+        if (std.mem.eql(u8, "password", kv.key.str)) {
+            password = kv.value.str;
+        }
     }
 
-    if (r.getParamStr("email", self.alloc, false)) |maybe_str| {
-        if (maybe_str) |*s| {
-            defer s.deinit();
+    std.debug.print("name={s}, email={s}, password={s}\n", .{ name.?, email.?, password.? });
 
-            std.mem.copy(u8, email[0..], s.str);
-            std.log.info("Param email = {s}", .{s.str});
-        } else {
-            std.log.info("Param email not found!", .{});
-        }
-    } else |err| {
-        std.log.err("cannot check for `email` param: {any}\n", .{err});
-    }
-
-    if (r.getParamStr("password", self.alloc, false)) |maybe_str| {
-        if (maybe_str) |*s| {
-            defer s.deinit();
-
-            std.mem.copy(u8, password[0..], s.str);
-            std.log.info("Param password = {s}", .{s.str});
-        } else {
-            std.log.info("Param password not found!", .{});
-        }
-    } else |err| {
-        std.log.err("cannot check for `password` param: {any}\n", .{err});
-    }
-
-    std.debug.print("name={s}, email={s}, password={s}\n", .{ name, email, password });
-
-    if (self.users.add(&name, &email, &password)) |id| {
-        std.debug.print("{s} logged in as user {d}", .{ email, id });
+    if (self.users.add(name, email, password)) |id| {
+        std.debug.print("{s} logged in as user {d}\n", .{ email.?, id });
+        r.redirectTo("/", zap.StatusCode.found) catch return;
     } else |err| {
         std.debug.print("ADDING error: {}\n", .{err});
         return;
