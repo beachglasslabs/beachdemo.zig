@@ -85,6 +85,7 @@ fn addUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     // check for FORM parameters
     r.parseBody() catch |err| {
         std.log.err("Parse Body error: {any}. Expected if body is empty", .{err});
+        r.redirectTo("/auth", zap.StatusCode.found) catch return;
     };
 
     // check for query parameters

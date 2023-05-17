@@ -2,94 +2,35 @@ const std = @import("std");
 const zap = @import("zap");
 const UserEndpoint = @import("user_endpoint.zig");
 const SessionEndpoint = @import("session_endpoint.zig");
+const Router = @import("router.zig");
 
-const Method = enum {
-    DELETE,
-    GET,
-    PATCH,
-    POST,
-    PUT,
-};
-
-const DispatchHttpRequestFn = *const fn (std.mem.Allocator, zap.SimpleRequest) anyerror!void;
-
-fn setupRoutes(a: std.mem.Allocator) !void {
-    routes = std.StringHashMap(DispatchHttpRequestFn).init(a);
-    try routes.put("/auth", auth);
-    try routes.put("/", index);
+fn auth(r: zap.SimpleRequest) void {
+    Router.renderTemplate(r, "web/templates/auth.html", .{}) catch return;
 }
 
-var routes: std.StringHashMap(DispatchHttpRequestFn) = undefined;
-
-var gpa = std.heap.GeneralPurposeAllocator(.{
-    .thread_safe = true,
-}){};
-var allocator = gpa.allocator();
-
-fn dispatchRoutes(r: zap.SimpleRequest) void {
-    std.debug.print("in dispatch:\n", .{});
-    if (r.query) |query| {
-        std.debug.print("QUERY: {s}\n", .{query});
-    }
-
-    if (r.path) |path| {
-        std.debug.print("PATH: {s}\n", .{path});
-        if (routes.get(path)) |handler| {
-            handler(allocator, r) catch |err| {
-                const error_html = std.fmt.allocPrint(allocator, "<html><body><pre>{}</pre></body></html>", .{err}) catch return;
-                defer allocator.free(error_html);
-                r.sendBody(error_html) catch return;
-            };
-            return;
-        }
-    }
-
-    r.sendBody("<html><body><h1>Oops!</h1></body></html>") catch return;
-}
-
-fn auth(a: std.mem.Allocator, r: zap.SimpleRequest) !void {
-    return render(a, r, "web/templates/auth.html", .{});
-}
-
-fn index(a: std.mem.Allocator, r: zap.SimpleRequest) !void {
-    return render(a, r, "web/templates/index.html", .{});
-}
-
-fn render(a: std.mem.Allocator, r: zap.SimpleRequest, t: []const u8, m: anytype) !void {
-    const file = try std.fs.cwd().openFile(
-        t,
-        .{},
-    );
-    defer file.close();
-
-    const size = (try file.stat()).size;
-
-    const template = try file.reader().readAllAlloc(a, size);
-
-    const p = try zap.MustacheNew(template);
-    defer zap.MustacheFree(p);
-    const ret = zap.MustacheBuild(p, m);
-    defer ret.deinit();
-    if (r.setContentType(.HTML)) {
-        if (ret.str()) |resp| {
-            try r.sendBody(resp);
-        } else {
-            try r.sendBody("<html><body><h1>MustacheBuild() failed!</h1></body></html>");
-        }
-    } else |err| return err;
-    return;
+fn index(r: zap.SimpleRequest) void {
+    Router.renderTemplate(r, "web/templates/index.html", .{}) catch return;
 }
 
 pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{
+        .thread_safe = true,
+    }){};
+    var allocator = gpa.allocator();
+
     // setup routes
-    try setupRoutes(allocator);
+    Router.init(allocator);
+    defer Router.deinit();
+
+    try Router.get("/auth", auth);
+    try Router.get("/", index);
 
     // setup listener
     var listener = zap.SimpleEndpointListener.init(
         allocator,
         .{
             .port = 3000,
-            .on_request = dispatchRoutes,
+            .on_request = Router.dispatcher,
             .public_folder = "public",
             .log = true,
             .max_clients = 100000,
