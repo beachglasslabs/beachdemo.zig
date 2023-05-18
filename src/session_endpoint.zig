@@ -137,13 +137,14 @@ fn deleteSession(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     const self = @fieldParentPtr(Self, "endpoint", e);
     std.debug.print("deleting session\n", .{});
     if (r.path) |path| {
+        std.debug.print("deleting path {s}\n", .{path});
         if (self.sessionIdFromPath(path)) |id| {
             if (self.sessions.delete(id)) {
-                return r.redirectTo("/auth", zap.StatusCode.found) catch return;
+                return r.redirectTo("/auth", zap.StatusCode.see_other) catch return;
             } else {
-                return r.redirectTo("/auth", zap.StatusCode.found) catch return;
+                return r.redirectTo("/auth", zap.StatusCode.see_other) catch return;
             }
         }
     }
-    return r.redirectTo("/auth", zap.StatusCode.found) catch return;
+    return r.redirectTo("/auth", zap.StatusCode.see_other) catch return;
 }
