@@ -14,8 +14,7 @@ fn index(r: zap.SimpleRequest) void {
 }
 
 fn redirect(r: zap.SimpleRequest) void {
-    r.redirectTo("/auth", zap.StatusCode.unauthorized) catch return;
-    return;
+    r.redirectTo("/auth", zap.StatusCode.see_other) catch return;
 }
 
 pub fn main() !void {

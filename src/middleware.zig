@@ -72,8 +72,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                         unauthorized(&myself.fascade, r);
                         return;
                     } else {
-                        r.setStatus(.unauthorized);
-                        r.sendBody("UNAUTHORIZED") catch return;
+                        myself.redirect(r);
                         return;
                     }
                 },
@@ -105,8 +104,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                         unauthorized(&myself.fascade, r);
                         return;
                     } else {
-                        r.setStatus(.unauthorized);
-                        r.sendBody("UNAUTHORIZED") catch return;
+                        myself.redirect(r);
                         return;
                     }
                 },
@@ -138,8 +136,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                         unauthorized(&myself.fascade, r);
                         return;
                     } else {
-                        r.setStatus(.unauthorized);
-                        r.sendBody("UNAUTHORIZED") catch return;
+                        myself.redirect(r);
                         return;
                     }
                 },
@@ -171,8 +168,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                         unauthorized(&myself.fascade, r);
                         return;
                     } else {
-                        r.setStatus(.unauthorized);
-                        r.sendBody("UNAUTHORIZED") catch return;
+                        myself.redirect(r);
                         return;
                     }
                 },
@@ -204,8 +200,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                         unauthorized(&myself.fascade, r);
                         return;
                     } else {
-                        r.setStatus(.unauthorized);
-                        r.sendBody("UNAUTHORIZED") catch return;
+                        myself.redirect(r);
                         return;
                     }
                 },
