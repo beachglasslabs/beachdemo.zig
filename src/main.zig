@@ -3,6 +3,7 @@ const zap = @import("zap");
 const UserEndpoint = @import("user_endpoint.zig");
 const SessionEndpoint = @import("session_endpoint.zig");
 const Router = @import("router.zig");
+const Middleware = @import("middleware.zig");
 
 fn auth(r: zap.SimpleRequest) void {
     Router.renderTemplate(r, "web/templates/auth.html", .{}) catch return;
@@ -10,6 +11,11 @@ fn auth(r: zap.SimpleRequest) void {
 
 fn index(r: zap.SimpleRequest) void {
     Router.renderTemplate(r, "web/templates/index.html", .{}) catch return;
+}
+
+fn redirect(r: zap.SimpleRequest) void {
+    r.redirectTo("/auth", zap.StatusCode.unauthorized) catch return;
+    return;
 }
 
 pub fn main() !void {
@@ -29,8 +35,8 @@ pub fn main() !void {
     var listener = zap.SimpleEndpointListener.init(
         allocator,
         .{
+            .on_request = null,
             .port = 3000,
-            .on_request = Router.dispatcher,
             .public_folder = "public",
             .log = true,
             .max_clients = 100000,
@@ -45,9 +51,19 @@ pub fn main() !void {
     var session_endpoint = SessionEndpoint.init(allocator, "/session", &user_endpoint.users);
     defer session_endpoint.deinit();
 
+    // create authenticator
+    const Authenticator = zap.BearerAuthSingle;
+    var authenticator = try Authenticator.init(allocator, "token", null);
+    defer authenticator.deinit();
+
+    // create authenticating endpoint
+    const AuthMiddleware = Middleware.Middleware(Authenticator);
+    var auth_ep = AuthMiddleware.init(allocator, Router.dispatcher, &authenticator, redirect);
+    try auth_ep.addEndpoint(user_endpoint.getEndpoint());
+    try auth_ep.addEndpoint(session_endpoint.getEndpoint());
+
     // add endpoints
-    try listener.addEndpoint(user_endpoint.getEndpoint());
-    try listener.addEndpoint(session_endpoint.getEndpoint());
+    try listener.addEndpoint(auth_ep.getEndpoint());
 
     // listen
     try listener.listen();

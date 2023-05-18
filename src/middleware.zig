@@ -4,29 +4,34 @@ const zap = @import("zap");
 /// Wrap multiple endpoints
 pub fn Middleware(comptime Authenticator: type) type {
     return struct {
-        allocator: std.mem.Allocator,
-        authenticator: *Authenticator,
         endpoints: std.ArrayList(*zap.SimpleEndpoint),
+        authenticator: *Authenticator,
+        handler: zap.SimpleHttpRequestFn,
+        redirect: zap.SimpleHttpRequestFn,
         fascade: zap.SimpleEndpoint,
         const Self = @This();
 
-        pub fn init(allocator: std.mem.Allocator, authenticator: *Authenticator) Self {
+        pub fn init(a: std.mem.Allocator, handler: zap.SimpleHttpRequestFn, authenticator: *Authenticator, redirect: zap.SimpleHttpRequestFn) Self {
             return .{
-                .allocator = allocator,
                 .authenticator = authenticator,
-                .endpoints = std.ArrayList(*zap.SimpleEndpoint).init(),
+                .endpoints = std.ArrayList(*zap.SimpleEndpoint).init(a),
+                .handler = handler,
+                .redirect = redirect,
                 .fascade = zap.SimpleEndpoint.init(.{
                     .path = "/", // we do everything
-                    // we override only the set ones. the other ones
-                    // are set to null anyway -> will be nopped out
                     .get = get,
                     .post = post,
                     .put = put,
                     .delete = delete,
-                    .patch = patch,
-                    .unauthorized = default_unauth,
+                    //.patch = patch,
+                    .unauthorized = redirectTo,
                 }),
             };
+        }
+
+        pub fn deinit(self: *Self) void {
+            self.endpoints.deinit();
+            self.fascade.deinit();
         }
 
         /// get the mega endpoint struct so we can be stored in the listener
@@ -36,12 +41,26 @@ pub fn Middleware(comptime Authenticator: type) type {
             return &self.fascade;
         }
 
-        pub fn default_unauth(r: zap.SimpleRequest) void {
-            r.setStatus(zap.unauthorized);
+        pub fn addEndpoint(self: *Self, e: *zap.SimpleEndpoint) !void {
+            for (self.endpoints.items) |other| {
+                if (std.mem.startsWith(
+                    u8,
+                    other.settings.path,
+                    e.settings.path,
+                ) or std.mem.startsWith(
+                    u8,
+                    e.settings.path,
+                    other.settings.path,
+                )) {
+                    return zap.EndpointListenerError.EndpointPathShadowError;
+                }
+            }
+            try self.endpoints.append(e);
         }
 
-        pub fn addEndpoint(self: *Self, e: *zap.SimpleEndpoint) void {
-            self.endpoints.append(e);
+        pub fn redirectTo(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
+            const myself: *Self = @fieldParentPtr(Self, "fascade", e);
+            return myself.redirect(r);
         }
 
         /// here, the fascade will be passed in
@@ -50,7 +69,7 @@ pub fn Middleware(comptime Authenticator: type) type {
             switch (myself.authenticator.authenticateRequest(&r)) {
                 .AuthFailed => {
                     if (e.settings.unauthorized) |unauthorized| {
-                        unauthorized(myself.endpoint, r);
+                        unauthorized(&myself.fascade, r);
                         return;
                     } else {
                         r.setStatus(.unauthorized);
@@ -58,7 +77,21 @@ pub fn Middleware(comptime Authenticator: type) type {
                         return;
                     }
                 },
-                .AuthOK => myself.endpoint.settings.get.?(myself.endpoint, r),
+                .AuthOK => {
+                    if (r.path) |p| {
+                        var handled = false;
+                        for (myself.endpoints.items) |ep| {
+                            if (std.mem.startsWith(u8, p, e.settings.path)) {
+                                handled = true;
+                                ep.settings.get.?(&myself.fascade, r);
+                                return;
+                            }
+                        }
+                        if (!handled) {
+                            myself.handler(r);
+                        }
+                    }
+                },
                 .Handled => {},
             }
         }
@@ -69,7 +102,7 @@ pub fn Middleware(comptime Authenticator: type) type {
             switch (myself.authenticator.authenticateRequest(&r)) {
                 .AuthFailed => {
                     if (e.settings.unauthorized) |unauthorized| {
-                        unauthorized(myself.endpoint, r);
+                        unauthorized(&myself.fascade, r);
                         return;
                     } else {
                         r.setStatus(.unauthorized);
@@ -77,7 +110,21 @@ pub fn Middleware(comptime Authenticator: type) type {
                         return;
                     }
                 },
-                .AuthOK => myself.endpoint.settings.post.?(myself.endpoint, r),
+                .AuthOK => {
+                    if (r.path) |p| {
+                        var handled = false;
+                        for (myself.endpoints.items) |ep| {
+                            if (std.mem.startsWith(u8, p, e.settings.path)) {
+                                handled = true;
+                                ep.settings.post.?(&myself.fascade, r);
+                                return;
+                            }
+                        }
+                        if (!handled) {
+                            myself.handler(r);
+                        }
+                    }
+                },
                 .Handled => {},
             }
         }
@@ -88,7 +135,7 @@ pub fn Middleware(comptime Authenticator: type) type {
             switch (myself.authenticator.authenticateRequest(&r)) {
                 .AuthFailed => {
                     if (e.settings.unauthorized) |unauthorized| {
-                        unauthorized(myself.endpoint, r);
+                        unauthorized(&myself.fascade, r);
                         return;
                     } else {
                         r.setStatus(.unauthorized);
@@ -96,7 +143,21 @@ pub fn Middleware(comptime Authenticator: type) type {
                         return;
                     }
                 },
-                .AuthOK => myself.endpoint.settings.put.?(myself.endpoint, r),
+                .AuthOK => {
+                    if (r.path) |p| {
+                        var handled = false;
+                        for (myself.endpoints.items) |ep| {
+                            if (std.mem.startsWith(u8, p, e.settings.path)) {
+                                handled = true;
+                                ep.settings.put.?(&myself.fascade, r);
+                                return;
+                            }
+                        }
+                        if (!handled) {
+                            myself.handler(r);
+                        }
+                    }
+                },
                 .Handled => {},
             }
         }
@@ -107,7 +168,7 @@ pub fn Middleware(comptime Authenticator: type) type {
             switch (myself.authenticator.authenticateRequest(&r)) {
                 .AuthFailed => {
                     if (e.settings.unauthorized) |unauthorized| {
-                        unauthorized(myself.endpoint, r);
+                        unauthorized(&myself.fascade, r);
                         return;
                     } else {
                         r.setStatus(.unauthorized);
@@ -115,7 +176,21 @@ pub fn Middleware(comptime Authenticator: type) type {
                         return;
                     }
                 },
-                .AuthOK => myself.endpoint.settings.delete.?(myself.endpoint, r),
+                .AuthOK => {
+                    if (r.path) |p| {
+                        var handled = false;
+                        for (myself.endpoints.items) |ep| {
+                            if (std.mem.startsWith(u8, p, e.settings.path)) {
+                                handled = true;
+                                ep.settings.delete.?(&myself.fascade, r);
+                                return;
+                            }
+                        }
+                        if (!handled) {
+                            myself.handler(r);
+                        }
+                    }
+                },
                 .Handled => {},
             }
         }
@@ -126,7 +201,7 @@ pub fn Middleware(comptime Authenticator: type) type {
             switch (myself.authenticator.authenticateRequest(&r)) {
                 .AuthFailed => {
                     if (e.settings.unauthorized) |unauthorized| {
-                        unauthorized(myself.endpoint, r);
+                        unauthorized(&myself.fascade, r);
                         return;
                     } else {
                         r.setStatus(.unauthorized);
@@ -134,7 +209,21 @@ pub fn Middleware(comptime Authenticator: type) type {
                         return;
                     }
                 },
-                .AuthOK => myself.endpoint.settings.patch.?(myself.endpoint, r),
+                .AuthOK => {
+                    if (r.path) |p| {
+                        var handled = false;
+                        for (myself.endpoints.items) |ep| {
+                            if (std.mem.startsWith(u8, p, e.settings.path)) {
+                                handled = true;
+                                ep.settings.patch.?(&myself.fascade, r);
+                                return;
+                            }
+                        }
+                        if (!handled) {
+                            myself.handler(r);
+                        }
+                    }
+                },
                 .Handled => {},
             }
         }
