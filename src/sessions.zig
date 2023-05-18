@@ -1,30 +1,23 @@
 const std = @import("std");
+const Users = @import("users.zig");
+const User = Users.User;
 
 alloc: std.mem.Allocator = undefined,
-sessions: std.AutoHashMap(usize, InternalSession) = undefined,
+sessions: std.AutoHashMap(usize, Session) = undefined,
 lock: std.Thread.Mutex = undefined,
 count: usize = 0,
 
 pub const Self = @This();
 
-const InternalSession = struct {
-    id: usize = 0,
-    firstnamebuf: [64]u8,
-    firstnamelen: usize,
-    lastnamebuf: [64]u8,
-    lastnamelen: usize,
-};
-
 pub const Session = struct {
     id: usize = 0,
-    first_name: []const u8,
-    last_name: []const u8,
+    user: *const User,
 };
 
 pub fn init(a: std.mem.Allocator) Self {
     return .{
         .alloc = a,
-        .sessions = std.AutoHashMap(usize, InternalSession).init(a),
+        .sessions = std.AutoHashMap(usize, Session).init(a),
         .lock = std.Thread.Mutex{},
     };
 }
@@ -35,20 +28,10 @@ pub fn deinit(self: *Self) void {
 
 // the request will be freed (and its mem reused by facilio) when it's
 // completed, so we take copies of the names
-pub fn addByName(self: *Self, first: ?[]const u8, last: ?[]const u8) !usize {
-    var session: InternalSession = undefined;
-    session.firstnamelen = 0;
-    session.lastnamelen = 0;
+pub fn login(self: *Self, user: *const User) !usize {
+    var session: Session = undefined;
 
-    if (first) |firstname| {
-        std.mem.copy(u8, session.firstnamebuf[0..], firstname);
-        session.firstnamelen = firstname.len;
-    }
-
-    if (last) |lastname| {
-        std.mem.copy(u8, session.lastnamebuf[0..], lastname);
-        session.lastnamelen = lastname.len;
-    }
+    session.user = user;
 
     // We lock only on insertion, deletion, and listing
     self.lock.lock();
@@ -58,7 +41,7 @@ pub fn addByName(self: *Self, first: ?[]const u8, last: ?[]const u8) !usize {
         self.count += 1;
         return session.id;
     } else |err| {
-        std.debug.print("addByName error: {}\n", .{err});
+        std.debug.print("create error: {}\n", .{err});
         // make sure we pass on the error
         return err;
     }
@@ -82,34 +65,10 @@ pub fn get(self: *Self, id: usize) ?Session {
     if (self.sessions.getPtr(id)) |pSession| {
         return .{
             .id = pSession.id,
-            .first_name = pSession.firstnamebuf[0..pSession.firstnamelen],
-            .last_name = pSession.lastnamebuf[0..pSession.lastnamelen],
+            .user = pSession.user,
         };
     }
     return null;
-}
-
-pub fn update(
-    self: *Self,
-    id: usize,
-    first: ?[]const u8,
-    last: ?[]const u8,
-) bool {
-    // we don't care about locking here
-    // we update in-place, via getPtr
-    if (self.sessions.getPtr(id)) |pSession| {
-        pSession.firstnamelen = 0;
-        pSession.lastnamelen = 0;
-        if (first) |firstname| {
-            std.mem.copy(u8, pSession.firstnamebuf[0..], firstname);
-            pSession.firstnamelen = firstname.len;
-        }
-        if (last) |lastname| {
-            std.mem.copy(u8, pSession.lastnamebuf[0..], lastname);
-            pSession.lastnamelen = lastname.len;
-        }
-    }
-    return false;
 }
 
 pub fn toJSON(self: *Self) ![]const u8 {
@@ -168,13 +127,13 @@ pub fn listWithRaceCondition(self: *Self, out: *std.ArrayList(Session)) !void {
 }
 
 const JsonSessionIteratorWithRaceCondition = struct {
-    it: std.AutoHashMap(usize, InternalSession).ValueIterator = undefined,
+    it: std.AutoHashMap(usize, Session).ValueIterator = undefined,
     const This = @This();
 
     // careful:
     // - Self refers to the file's struct
     // - This refers to the JsonSessionIterator struct
-    pub fn init(internal_sessions: *std.AutoHashMap(usize, InternalSession)) This {
+    pub fn init(internal_sessions: *std.AutoHashMap(usize, Session)) This {
         return .{
             .it = internal_sessions.valueIterator(),
         };
@@ -189,15 +148,8 @@ const JsonSessionIteratorWithRaceCondition = struct {
             var session: Session = .{
                 // we don't need .* syntax but want to make it obvious
                 .id = pSession.*.id,
-                .first_name = pSession.*.firstnamebuf[0..pSession.*.firstnamelen],
-                .last_name = pSession.*.lastnamebuf[0..pSession.*.lastnamelen],
+                .user = pSession.*.user,
             };
-            if (pSession.*.firstnamelen == 0) {
-                session.first_name = "";
-            }
-            if (pSession.*.lastnamelen == 0) {
-                session.last_name = "";
-            }
             return session;
         }
         return null;

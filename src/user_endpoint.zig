@@ -114,18 +114,15 @@ fn addUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
         }
     }
 
-    std.debug.print("name={s}, email={s}, password={s}\n", .{ name.?, email.?, password.? });
+    std.log.info("name={s}, email={s}, password={s}\n", .{ name.?, email.?, password.? });
 
     if (self.users.add(name, email, password)) |id| {
-        std.debug.print("{s} logged in as user {d}\n", .{ email.?, id });
+        std.log.info("{s} registered as user {d}\n", .{ email.?, id });
         r.redirectTo("/", zap.StatusCode.found) catch return;
     } else |err| {
         std.debug.print("ADDING error: {}\n", .{err});
         return;
     }
-
-    const json = self.users.toJSON() catch return;
-    std.debug.print("users: {s}\n", .{json});
 }
 
 fn updateUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {

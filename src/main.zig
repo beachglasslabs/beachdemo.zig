@@ -42,7 +42,7 @@ pub fn main() !void {
     var user_endpoint = UserEndpoint.init(allocator, "/users");
     defer user_endpoint.deinit();
 
-    var session_endpoint = SessionEndpoint.init(allocator, "/sessions");
+    var session_endpoint = SessionEndpoint.init(allocator, "/session", &user_endpoint.users);
     defer session_endpoint.deinit();
 
     // add endpoints

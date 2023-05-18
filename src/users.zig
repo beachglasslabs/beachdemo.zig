@@ -2,7 +2,7 @@ const std = @import("std");
 
 alloc: std.mem.Allocator = undefined,
 users_by_id: std.AutoHashMap(usize, InternalUser) = undefined,
-users_by_email: std.StringHashMap(InternalUser) = undefined,
+users_by_email: std.StringHashMap(User) = undefined,
 lock: std.Thread.Mutex = undefined,
 count: usize = 0,
 
@@ -29,7 +29,7 @@ pub fn init(a: std.mem.Allocator) Self {
     return .{
         .alloc = a,
         .users_by_id = std.AutoHashMap(usize, InternalUser).init(a),
-        .users_by_email = std.StringHashMap(InternalUser).init(a),
+        .users_by_email = std.StringHashMap(User).init(a),
         .lock = std.Thread.Mutex{},
     };
 }
@@ -66,14 +66,18 @@ pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8)
     self.lock.lock();
     defer self.lock.unlock();
     user.id = self.count + 1;
-    self.users_by_email.put(&user.mailbuf, user) catch |err| {
-        std.debug.print("add error: {}\n", .{err});
-        // make sure we pass on the error
-        return err;
-    };
     if (self.users_by_id.put(user.id, user)) {
+        std.debug.print("user {d} added\n", .{user.id});
         self.count += 1;
-        return user.id;
+        var newUser = self.get(user.id).?;
+        std.debug.print("adding user: {s}\n", .{newUser.email});
+        if (self.users_by_email.put(newUser.email, newUser)) {
+            return user.id;
+        } else |err| {
+            std.debug.print("add error: {}\n", .{err});
+            // make sure we pass on the error
+            return err;
+        }
     } else |err| {
         std.debug.print("add error: {}\n", .{err});
         // make sure we pass on the error
@@ -131,6 +135,16 @@ pub fn update(
             pUser.passlen = userpass.len;
         }
     }
+    return false;
+}
+
+pub fn checkPassword(self: *Self, email: []const u8, password: []const u8) bool {
+    if (self.users_by_email.get(email)) |user| {
+        if (std.mem.eql(u8, user.password, password)) {
+            return true;
+        }
+    }
+
     return false;
 }
 
