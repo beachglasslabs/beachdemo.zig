@@ -1,22 +1,15 @@
 const std = @import("std");
 const zap = @import("zap");
 
-pub const UserPassSessionAuthArgs = struct {
-    /// username body parameter
-    usernameParam: []const u8,
-    /// password body parameter
-    passwordParam: []const u8,
-    /// redirect to this page if auth fails
-    loginPage: []const u8,
-    /// name of the cookie
+pub const CookieSessionAuthArgs = struct {
     cookieName: []const u8,
     /// cookie max age in seconds; 0 -> session cookie
-    cookieMaxAge: u8 = 0,
+    cookieMaxAge: u32 = 0,
     /// redirect status code, defaults to 302 found
     redirectCode: zap.StatusCode = .found,
 };
 
-/// UserPassSessionAuth supports the following use case:
+/// CookieSessionAuth supports the following use case:
 ///
 /// - checks every request: is it going to the login page? -> let the request through.
 /// - else:
@@ -33,7 +26,7 @@ pub const UserPassSessionAuthArgs = struct {
 /// mechanisms described above will kick in. For that reason: please know what you're
 /// doing.
 ///
-/// See UserPassSessionAuthArgs:
+/// See CookieSessionAuthArgs:
 /// - username & password param names can be defined by you
 /// - session cookie name and max-age can be defined by you
 /// - login page and redirect code (.302) can be defined by you
@@ -53,11 +46,11 @@ pub const UserPassSessionAuthArgs = struct {
 ///       -> another browser program with the page still open would still be able to use
 ///       -> the session. Which is kindof OK, but not as cool as erasing the token
 ///       -> on the server side which immediately block all other browsers as well.
-pub fn UserPassSessionAuth(comptime Lookup: type, comptime lockedPwLookups: bool, comptime lockedTokenLookups: bool) type {
+pub fn CookieSessionAuth(comptime Lookup: type, comptime lockedPwLookups: bool, comptime lockedTokenLookups: bool) type {
     return struct {
         allocator: std.mem.Allocator,
         lookup: *Lookup,
-        settings: zap.UserPassSessionAuthArgs,
+        settings: zap.CookieSessionAuthArgs,
 
         // TODO: cookie store per user
         sessionTokens: SessionTokenMap,
@@ -73,7 +66,7 @@ pub fn UserPassSessionAuth(comptime Lookup: type, comptime lockedPwLookups: bool
         pub fn init(
             allocator: std.mem.Allocator,
             lookup: *Lookup,
-            args: UserPassSessionAuthArgs,
+            args: CookieSessionAuthArgs,
         ) !Self {
             var ret: Self = .{
                 .allocator = allocator,
@@ -143,7 +136,7 @@ pub fn UserPassSessionAuth(comptime Lookup: type, comptime lockedPwLookups: bool
                     _ = self.sessionTokens.remove(cookie);
                 }
             } else |err| {
-                zap.debug("unreachable: UserPassSessionAuth.logout: {any}", .{err});
+                zap.debug("unreachable: CookieSessionAuth.logout: {any}", .{err});
             }
         }
 
@@ -164,7 +157,7 @@ pub fn UserPassSessionAuth(comptime Lookup: type, comptime lockedPwLookups: bool
 
             // parse body
             r.parseBody() catch {
-                // zap.debug("warning: parseBody() failed in UserPassSessionAuth: {any}", .{err});
+                // zap.debug("warning: parseBody() failed in CookieSessionAuth: {any}", .{err});
                 // this is not an error in case of e.g. gets with querystrings
             };
 
@@ -196,7 +189,7 @@ pub fn UserPassSessionAuth(comptime Lookup: type, comptime lockedPwLookups: bool
                     }
                 }
             } else |err| {
-                zap.debug("unreachable: could not check for cookie in UserPassSessionAuth: {any}", .{err});
+                zap.debug("unreachable: could not check for cookie in CookieSessionAuth: {any}", .{err});
             }
 
             // get params of username and password
@@ -240,12 +233,12 @@ pub fn UserPassSessionAuth(comptime Lookup: type, comptime lockedPwLookups: bool
                             }
                         }
                     } else |err| {
-                        zap.debug("getParamSt() for password failed in UserPassSessionAuth: {any}", .{err});
+                        zap.debug("getParamSt() for password failed in CookieSessionAuth: {any}", .{err});
                         return .AuthFailed;
                     }
                 }
             } else |err| {
-                zap.debug("getParamSt() for user failed in UserPassSessionAuth: {any}", .{err});
+                zap.debug("getParamSt() for user failed in CookieSessionAuth: {any}", .{err});
                 return .AuthFailed;
             }
             return .AuthFailed;
@@ -264,7 +257,7 @@ pub fn UserPassSessionAuth(comptime Lookup: type, comptime lockedPwLookups: bool
                     // we need to redirect and return .Handled
                     self.redirect(r) catch |err| {
                         // we just give up
-                        zap.debug("redirect() failed in UserPassSessionAuth: {any}", .{err});
+                        zap.debug("redirect() failed in CookieSessionAuth: {any}", .{err});
                     };
                     return .Handled;
                 },
