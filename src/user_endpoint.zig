@@ -41,13 +41,12 @@ pub fn getEndpoint(self: *Self) *zap.SimpleEndpoint {
     return &self.endpoint;
 }
 
-fn userIdFromPath(self: *Self, path: []const u8) ?usize {
+fn userIdFromPath(self: *Self, path: []const u8) ?[]const u8 {
     if (path.len >= self.endpoint.settings.path.len + 2) {
         if (path[self.endpoint.settings.path.len] != '/') {
             return null;
         }
-        const idstr = path[self.endpoint.settings.path.len + 1 ..];
-        return std.fmt.parseUnsigned(usize, idstr, 10) catch null;
+        return path[self.endpoint.settings.path.len + 1 ..];
     }
     return null;
 }

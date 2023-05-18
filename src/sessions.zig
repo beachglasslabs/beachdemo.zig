@@ -1,23 +1,23 @@
 const std = @import("std");
 const Users = @import("users.zig");
 const User = Users.User;
+const uuid = @import("uuid.zig");
 
 alloc: std.mem.Allocator = undefined,
-sessions: std.AutoHashMap(usize, Session) = undefined,
+sessions: std.StringHashMap(Session) = undefined,
 lock: std.Thread.Mutex = undefined,
-count: usize = 0,
 
 pub const Self = @This();
 
 pub const Session = struct {
-    id: usize = 0,
-    user: *const User,
+    id: [36]u8 = undefined,
+    user: *const User = undefined,
 };
 
 pub fn init(a: std.mem.Allocator) Self {
     return .{
         .alloc = a,
-        .sessions = std.AutoHashMap(usize, Session).init(a),
+        .sessions = std.StringHashMap(Session).init(a),
         .lock = std.Thread.Mutex{},
     };
 }
@@ -28,7 +28,7 @@ pub fn deinit(self: *Self) void {
 
 // the request will be freed (and its mem reused by facilio) when it's
 // completed, so we take copies of the names
-pub fn login(self: *Self, user: *const User) !usize {
+pub fn login(self: *Self, user: *const User) ![]const u8 {
     var session: Session = undefined;
 
     session.user = user;
@@ -36,10 +36,9 @@ pub fn login(self: *Self, user: *const User) !usize {
     // We lock only on insertion, deletion, and listing
     self.lock.lock();
     defer self.lock.unlock();
-    session.id = self.count + 1;
-    if (self.sessions.put(session.id, session)) {
-        self.count += 1;
-        return session.id;
+    _ = try std.fmt.bufPrint(&session.id, "{s}", .{uuid.newV4()});
+    if (self.sessions.put(&session.id, session)) {
+        return &session.id;
     } else |err| {
         std.debug.print("create error: {}\n", .{err});
         // make sure we pass on the error
@@ -47,19 +46,15 @@ pub fn login(self: *Self, user: *const User) !usize {
     }
 }
 
-pub fn delete(self: *Self, id: usize) bool {
+pub fn delete(self: *Self, id: []const u8) bool {
     // We lock only on insertion, deletion, and listing
     self.lock.lock();
     defer self.lock.unlock();
 
-    const ret = self.sessions.remove(id);
-    if (ret) {
-        self.count -= 1;
-    }
-    return ret;
+    return self.sessions.remove(id);
 }
 
-pub fn get(self: *Self, id: usize) ?Session {
+pub fn get(self: *Self, id: []const u8) ?Session {
     // we don't care about locking here, as our usage-pattern is unlikely to
     // get a session by id that is not known yet
     if (self.sessions.getPtr(id)) |pSession| {
@@ -89,7 +84,6 @@ pub fn toJSON(self: *Self) ![]const u8 {
         try l.append(session);
     }
     std.debug.assert(self.sessions.count() == l.items.len);
-    std.debug.assert(self.count == l.items.len);
     return std.json.stringifyAlloc(self.alloc, l.items, .{});
 }
 
@@ -123,17 +117,16 @@ pub fn listWithRaceCondition(self: *Self, out: *std.ArrayList(Session)) !void {
         try out.append(session);
     }
     std.debug.assert(self.sessions.count() == out.items.len);
-    std.debug.assert(self.count == out.items.len);
 }
 
 const JsonSessionIteratorWithRaceCondition = struct {
-    it: std.AutoHashMap(usize, Session).ValueIterator = undefined,
+    it: std.StringHashMap(Session).ValueIterator = undefined,
     const This = @This();
 
     // careful:
     // - Self refers to the file's struct
     // - This refers to the JsonSessionIterator struct
-    pub fn init(internal_sessions: *std.AutoHashMap(usize, Session)) This {
+    pub fn init(internal_sessions: *std.StringHashMap(Session)) This {
         return .{
             .it = internal_sessions.valueIterator(),
         };

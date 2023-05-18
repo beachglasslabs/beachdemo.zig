@@ -43,13 +43,12 @@ pub fn getEndpoint(self: *Self) *zap.SimpleEndpoint {
     return &self.endpoint;
 }
 
-fn sessionIdFromPath(self: *Self, path: []const u8) ?usize {
+fn sessionIdFromPath(self: *Self, path: []const u8) ?[]const u8 {
     if (path.len >= self.endpoint.settings.path.len + 2) {
         if (path[self.endpoint.settings.path.len] != '/') {
             return null;
         }
-        const idstr = path[self.endpoint.settings.path.len + 1 ..];
-        return std.fmt.parseUnsigned(usize, idstr, 10) catch null;
+        return path[self.endpoint.settings.path.len + 1 ..];
     }
     return null;
 }
@@ -117,7 +116,7 @@ fn createSession(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
 
     if (self.users.users_by_email.get(email.?)) |user| {
         std.debug.print("got user by {s}\n", .{email.?});
-        if (self.users.checkPassword(email.?, password.?)) {
+        if (user.checkPassword(password.?)) {
             std.debug.print("password is correct\n", .{});
             if (self.sessions.login(&(self.users.get(user.id)).?)) |id| {
                 std.log.info("user {s} logged in new session {d}\n", .{ user.email, id });

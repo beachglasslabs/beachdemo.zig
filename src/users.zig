@@ -1,15 +1,15 @@
 const std = @import("std");
+const uuid = @import("uuid.zig");
 
 alloc: std.mem.Allocator = undefined,
-users_by_id: std.AutoHashMap(usize, InternalUser) = undefined,
+users_by_id: std.StringHashMap(InternalUser) = undefined,
 users_by_email: std.StringHashMap(User) = undefined,
 lock: std.Thread.Mutex = undefined,
-count: usize = 0,
 
 pub const Self = @This();
 
 const InternalUser = struct {
-    id: usize = 0,
+    id: [36]u8 = undefined,
     namebuf: [64]u8,
     namelen: usize,
     mailbuf: [64]u8,
@@ -19,16 +19,24 @@ const InternalUser = struct {
 };
 
 pub const User = struct {
-    id: usize = 0,
+    id: []const u8,
     name: []const u8,
     email: []const u8,
     password: []const u8,
+
+    pub fn checkPassword(self: *const User, password: []const u8) bool {
+        if (std.mem.eql(u8, self.password, password)) {
+            return true;
+        }
+
+        return false;
+    }
 };
 
 pub fn init(a: std.mem.Allocator) Self {
     return .{
         .alloc = a,
-        .users_by_id = std.AutoHashMap(usize, InternalUser).init(a),
+        .users_by_id = std.StringHashMap(InternalUser).init(a),
         .users_by_email = std.StringHashMap(User).init(a),
         .lock = std.Thread.Mutex{},
     };
@@ -41,7 +49,7 @@ pub fn deinit(self: *Self) void {
 
 // the request will be freed (and its mem reused by facilio) when it's
 // completed, so we take copies of the names
-pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8) !usize {
+pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8) ![]const u8 {
     var user: InternalUser = undefined;
     user.namelen = 0;
     user.maillen = 0;
@@ -65,14 +73,13 @@ pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8)
     // We lock only on insertion, deletion, and listing
     self.lock.lock();
     defer self.lock.unlock();
-    user.id = self.count + 1;
-    if (self.users_by_id.put(user.id, user)) {
+    _ = try std.fmt.bufPrint(&user.id, "{s}", .{uuid.newV4()});
+    if (self.users_by_id.put(&user.id, user)) {
         std.debug.print("user {d} added\n", .{user.id});
-        self.count += 1;
-        var newUser = self.get(user.id).?;
+        var newUser = self.get(&user.id).?;
         std.debug.print("adding user: {s}\n", .{newUser.email});
         if (self.users_by_email.put(newUser.email, newUser)) {
-            return user.id;
+            return &user.id;
         } else |err| {
             std.debug.print("add error: {}\n", .{err});
             // make sure we pass on the error
@@ -85,25 +92,21 @@ pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8)
     }
 }
 
-pub fn delete(self: *Self, id: usize) bool {
+pub fn delete(self: *Self, id: []const u8) bool {
     // We lock only on insertion, deletion, and listing
     self.lock.lock();
     defer self.lock.unlock();
 
     const user = self.users_by_id.fetchRemove(id).?.value;
-    var ret = self.users_by_email.remove(&user.mailbuf);
-    if (ret) {
-        self.count -= 1;
-    }
-    return ret;
+    return self.users_by_email.remove(&user.mailbuf);
 }
 
-pub fn get(self: *Self, id: usize) ?User {
+pub fn get(self: *Self, id: []const u8) ?User {
     // we don't care about locking here, as our usage-pattern is unlikely to
     // get a user by id that is not known yet
     if (self.users_by_id.getPtr(id)) |pUser| {
         return .{
-            .id = pUser.id,
+            .id = &pUser.id,
             .name = pUser.namebuf[0..pUser.namelen],
             .email = pUser.mailbuf[0..pUser.maillen],
             .password = pUser.passbuf[0..pUser.passlen],
@@ -114,7 +117,7 @@ pub fn get(self: *Self, id: usize) ?User {
 
 pub fn update(
     self: *Self,
-    id: usize,
+    id: []const u8,
     name: ?[]const u8,
     mail: ?[]const u8,
     pass: ?[]const u8,
@@ -138,16 +141,6 @@ pub fn update(
     return false;
 }
 
-pub fn checkPassword(self: *Self, email: []const u8, password: []const u8) bool {
-    if (self.users_by_email.get(email)) |user| {
-        if (std.mem.eql(u8, user.password, password)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 pub fn toJSON(self: *Self) ![]const u8 {
     self.lock.lock();
     defer self.lock.unlock();
@@ -167,7 +160,6 @@ pub fn toJSON(self: *Self) ![]const u8 {
     }
     std.debug.assert(self.users_by_id.count() == l.items.len);
     std.debug.assert(self.users_by_email.count() == l.items.len);
-    std.debug.assert(self.count == l.items.len);
     return std.json.stringifyAlloc(self.alloc, l.items, .{});
 }
 
@@ -201,17 +193,16 @@ pub fn listWithRaceCondition(self: *Self, out: *std.ArrayList(User)) !void {
         try out.append(user);
     }
     std.debug.assert(self.users_by_id.count() == out.items.len);
-    std.debug.assert(self.count == out.items.len);
 }
 
 const JsonUserIteratorWithRaceCondition = struct {
-    it: std.AutoHashMap(usize, InternalUser).ValueIterator = undefined,
+    it: std.StringHashMap(InternalUser).ValueIterator = undefined,
     const This = @This();
 
     // careful:
     // - Self refers to the file's struct
     // - This refers to the JsonUserIterator struct
-    pub fn init(internal_users: *std.AutoHashMap(usize, InternalUser)) This {
+    pub fn init(internal_users: *std.StringHashMap(InternalUser)) This {
         return .{
             .it = internal_users.valueIterator(),
         };
@@ -225,7 +216,7 @@ const JsonUserIteratorWithRaceCondition = struct {
             // SEE ABOVE NOTE regarding race condition why this is can be problematic
             var user: User = .{
                 // we don't need .* syntax but want to make it obvious
-                .id = pUser.*.id,
+                .id = &pUser.*.id,
                 .name = pUser.*.namebuf[0..pUser.*.namelen],
                 .email = pUser.*.mailbuf[0..pUser.*.maillen],
                 .password = pUser.*.passbuf[0..pUser.*.passlen],

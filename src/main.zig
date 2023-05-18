@@ -4,6 +4,11 @@ const UserEndpoint = @import("user_endpoint.zig");
 const SessionEndpoint = @import("session_endpoint.zig");
 const Router = @import("router.zig");
 const Middleware = @import("middleware.zig");
+const UserSession = @import("auth.zig");
+const Users = @import("users.zig");
+const Sessions = @import("sessions.zig");
+const User = Users.User;
+const Session = Sessions.Session;
 
 fn auth(r: zap.SimpleRequest) void {
     Router.renderTemplate(r, "web/templates/auth.html", .{}) catch return;
@@ -51,8 +56,17 @@ pub fn main() !void {
     defer session_endpoint.deinit();
 
     // create authenticator
-    const Authenticator = zap.BearerAuthSingle;
-    var authenticator = try Authenticator.init(allocator, "token", null);
+    const Authenticator = UserSession.SessionAuth(User, Session);
+    const auth_args = UserSession.SessionAuthArgs{
+        .username_param = "email",
+        .password_param = "password",
+        .auth_page = "/auth",
+        .white_list = &[_][]const u8{ "/users", "/session" },
+        .cookie_name = "token",
+        .cookie_maxage = 3,
+        .redirect_code = zap.StatusCode.see_other,
+    };
+    var authenticator = try Authenticator.init(allocator, &user_endpoint.users.users_by_email, &session_endpoint.sessions.sessions, auth_args);
     defer authenticator.deinit();
 
     // create authenticating endpoint
