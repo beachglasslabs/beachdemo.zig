@@ -123,12 +123,16 @@ pub fn SessionAuth(comptime User: type, comptime Session: type) type {
         fn _internal_authenticateRequest(self: *Self, r: *const zap.SimpleRequest) zap.AuthResult {
             // if we're requesting the login page, let the request through
             if (r.path) |p| {
+                std.debug.print("in internal.authenticateRequest: {s}\n", .{p});
                 for (self.settings.white_list) |page| {
+                    std.debug.print("in internal.authenticateRequest: checking at {s}\n", .{page});
                     if (std.mem.eql(u8, p, page)) {
+                        std.debug.print("in internal.authenticateRequest: whitelist ok {s}\n", .{page});
                         return .AuthOK;
                     }
                 }
             }
+            std.debug.print("in internal.authenticateRequest: going for auth]n", .{});
 
             // parse body
             r.parseBody() catch {
@@ -199,8 +203,10 @@ pub fn SessionAuth(comptime User: type, comptime Session: type) type {
         }
 
         pub fn authenticateRequest(self: *Self, r: *const zap.SimpleRequest) zap.AuthResult {
+            std.debug.print("in auth.authenticateRequest\n", .{});
             switch (self._internal_authenticateRequest(r)) {
                 .AuthOK => {
+                    std.debug.print("in auth.authenticateRequest returning .AuthOk\n", .{});
                     // username and pass are ok -> created token, set header, caller can continue
                     return .AuthOK;
                 },

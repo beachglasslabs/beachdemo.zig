@@ -41,21 +41,21 @@ pub fn Middleware(comptime Authenticator: type) type {
             return &self.fascade;
         }
 
-        pub fn addEndpoint(self: *Self, e: *zap.SimpleEndpoint) !void {
+        pub fn addEndpoint(self: *Self, ep: *zap.SimpleEndpoint) !void {
             for (self.endpoints.items) |other| {
                 if (std.mem.startsWith(
                     u8,
                     other.settings.path,
-                    e.settings.path,
+                    ep.settings.path,
                 ) or std.mem.startsWith(
                     u8,
-                    e.settings.path,
+                    ep.settings.path,
                     other.settings.path,
                 )) {
                     return zap.EndpointListenerError.EndpointPathShadowError;
                 }
             }
-            try self.endpoints.append(e);
+            try self.endpoints.append(ep);
         }
 
         pub fn redirectTo(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
@@ -65,6 +65,7 @@ pub fn Middleware(comptime Authenticator: type) type {
 
         /// here, the fascade will be passed in
         pub fn get(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
+            std.debug.print("in wrapper.get\n", .{});
             const myself: *Self = @fieldParentPtr(Self, "fascade", e);
             switch (myself.authenticator.authenticateRequest(&r)) {
                 .AuthFailed => {
@@ -77,16 +78,20 @@ pub fn Middleware(comptime Authenticator: type) type {
                     }
                 },
                 .AuthOK => {
+                    std.debug.print("in wrapper.get: auth ok\n", .{});
                     if (r.path) |p| {
+                        std.debug.print("in wrapper.get: {s}\n", .{p});
                         var handled = false;
                         for (myself.endpoints.items) |ep| {
-                            if (std.mem.startsWith(u8, p, e.settings.path)) {
+                            if (std.mem.startsWith(u8, p, ep.settings.path)) {
                                 handled = true;
-                                ep.settings.get.?(&myself.fascade, r);
+                                std.debug.print("in wrapper.get: passing to endpoint {s}\n", .{ep.settings.path});
+                                ep.settings.get.?(ep, r);
                                 return;
                             }
                         }
                         if (!handled) {
+                            std.debug.print("in wrapper.get: passing to handler\n", .{});
                             myself.handler(r);
                         }
                     }
@@ -112,9 +117,9 @@ pub fn Middleware(comptime Authenticator: type) type {
                     if (r.path) |p| {
                         var handled = false;
                         for (myself.endpoints.items) |ep| {
-                            if (std.mem.startsWith(u8, p, e.settings.path)) {
+                            if (std.mem.startsWith(u8, p, ep.settings.path)) {
                                 handled = true;
-                                ep.settings.post.?(&myself.fascade, r);
+                                ep.settings.post.?(ep, r);
                                 return;
                             }
                         }
@@ -144,9 +149,9 @@ pub fn Middleware(comptime Authenticator: type) type {
                     if (r.path) |p| {
                         var handled = false;
                         for (myself.endpoints.items) |ep| {
-                            if (std.mem.startsWith(u8, p, e.settings.path)) {
+                            if (std.mem.startsWith(u8, p, ep.settings.path)) {
                                 handled = true;
-                                ep.settings.put.?(&myself.fascade, r);
+                                ep.settings.put.?(ep, r);
                                 return;
                             }
                         }
@@ -176,9 +181,9 @@ pub fn Middleware(comptime Authenticator: type) type {
                     if (r.path) |p| {
                         var handled = false;
                         for (myself.endpoints.items) |ep| {
-                            if (std.mem.startsWith(u8, p, e.settings.path)) {
+                            if (std.mem.startsWith(u8, p, ep.settings.path)) {
                                 handled = true;
-                                ep.settings.delete.?(&myself.fascade, r);
+                                ep.settings.delete.?(ep, r);
                                 return;
                             }
                         }
@@ -208,9 +213,9 @@ pub fn Middleware(comptime Authenticator: type) type {
                     if (r.path) |p| {
                         var handled = false;
                         for (myself.endpoints.items) |ep| {
-                            if (std.mem.startsWith(u8, p, e.settings.path)) {
+                            if (std.mem.startsWith(u8, p, ep.settings.path)) {
                                 handled = true;
-                                ep.settings.patch.?(&myself.fascade, r);
+                                ep.settings.patch.?(ep, r);
                                 return;
                             }
                         }

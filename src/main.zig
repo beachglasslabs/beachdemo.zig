@@ -61,7 +61,7 @@ pub fn main() !void {
         .username_param = "email",
         .password_param = "password",
         .auth_page = "/auth",
-        .white_list = &[_][]const u8{ "/users", "/session" },
+        .white_list = &[_][]const u8{ "/users", "/session", "/auth" },
         .cookie_name = "token",
         .cookie_maxage = 3,
         .redirect_code = zap.StatusCode.see_other,
@@ -71,12 +71,12 @@ pub fn main() !void {
 
     // create authenticating endpoint
     const AuthMiddleware = Middleware.Middleware(Authenticator);
-    var auth_ep = AuthMiddleware.init(allocator, Router.dispatcher, &authenticator, redirect);
-    try auth_ep.addEndpoint(user_endpoint.getEndpoint());
-    try auth_ep.addEndpoint(session_endpoint.getEndpoint());
+    var auth_wrapper = AuthMiddleware.init(allocator, Router.dispatcher, &authenticator, redirect);
+    try auth_wrapper.addEndpoint(user_endpoint.getEndpoint());
+    try auth_wrapper.addEndpoint(session_endpoint.getEndpoint());
 
     // add endpoints
-    try listener.addEndpoint(auth_ep.getEndpoint());
+    try listener.addEndpoint(auth_wrapper.getEndpoint());
 
     // listen
     try listener.listen();
