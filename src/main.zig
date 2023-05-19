@@ -18,6 +18,10 @@ fn index(r: zap.SimpleRequest) void {
     Router.renderTemplate(r, "web/templates/index.html", .{}) catch return;
 }
 
+fn profiles(r: zap.SimpleRequest) void {
+    Router.renderTemplate(r, "web/templates/profiles.html", .{}) catch return;
+}
+
 fn redirect(r: zap.SimpleRequest) void {
     r.redirectTo("/auth", zap.StatusCode.see_other) catch return;
 }
@@ -32,8 +36,9 @@ pub fn main() !void {
     Router.init(allocator);
     defer Router.deinit();
 
-    try Router.get("/auth", auth);
     try Router.get("/", index);
+    try Router.get("/auth", auth);
+    try Router.get("/profiles", profiles);
 
     // setup listener
     var listener = zap.SimpleEndpointListener.init(
@@ -60,8 +65,12 @@ pub fn main() !void {
     const auth_args = UserSession.SessionAuthArgs{
         .username_param = "email",
         .password_param = "password",
-        .auth_page = "/auth",
-        .white_list = &[_][]const u8{ "/users", "/session", "/auth" },
+        .signin_url = "/auth",
+        .signup_url = "/auth",
+        .signin_callback = "/session",
+        .signin_success = "/profiles",
+        .signup_callback = "/users",
+        .signup_success = "/profiles",
         .cookie_name = "token",
         .cookie_maxage = 3,
         .redirect_code = zap.StatusCode.see_other,

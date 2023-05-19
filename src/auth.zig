@@ -4,8 +4,12 @@ const zap = @import("zap");
 pub const SessionAuthArgs = struct {
     username_param: []const u8,
     password_param: []const u8,
-    auth_page: []const u8,
-    white_list: []const []const u8,
+    signin_url: []const u8, // login page
+    signin_callback: []const u8, // the api endpoint for start a new session
+    signin_success: []const u8, // redirect page after successful login
+    signup_url: []const u8, // register page
+    signup_callback: []const u8, // the api endpoint for adding a new user
+    signup_success: []const u8, // redirect page after successful register
     cookie_name: []const u8,
     /// cookie max age in seconds; 0 -> session cookie
     cookie_maxage: u8 = 0,
@@ -78,9 +82,13 @@ pub fn SessionAuth(comptime User: type, comptime Session: type) type {
                 .settings = .{
                     .username_param = args.username_param,
                     .password_param = args.password_param,
-                    .auth_page = args.auth_page,
-                    .white_list = args.white_list,
-                    .cookie_name = try allocator.dupe(u8, args.cookie_name),
+                    .signin_url = args.signin_url,
+                    .signin_callback = args.signin_callback,
+                    .signin_success = args.signin_success,
+                    .signup_url = args.signup_url,
+                    .signup_callback = args.signup_callback,
+                    .signup_success = args.signup_success,
+                    .cookie_name = args.cookie_name,
                     .cookie_maxage = args.cookie_maxage,
                     .redirect_code = args.redirect_code,
                 },
@@ -121,15 +129,15 @@ pub fn SessionAuth(comptime User: type, comptime Session: type) type {
         }
 
         fn _internal_authenticateRequest(self: *Self, r: *const zap.SimpleRequest) zap.AuthResult {
+            const eql = std.mem.eql;
+            const s = self.settings;
+
             // if we're requesting the login page, let the request through
             if (r.path) |p| {
                 std.debug.print("in internal.authenticateRequest: {s}\n", .{p});
-                for (self.settings.white_list) |page| {
-                    std.debug.print("in internal.authenticateRequest: checking at {s}\n", .{page});
-                    if (std.mem.eql(u8, p, page)) {
-                        std.debug.print("in internal.authenticateRequest: whitelist ok {s}\n", .{page});
-                        return .AuthOK;
-                    }
+                if (eql(u8, p, s.signup_url) or eql(u8, p, s.signin_url)) {
+                    std.debug.print("in internal.authenticateRequest: signin or signup page\n", .{});
+                    return .AuthOK;
                 }
             }
             std.debug.print("in internal.authenticateRequest: going for auth\n", .{});
@@ -225,7 +233,7 @@ pub fn SessionAuth(comptime User: type, comptime Session: type) type {
         }
 
         fn redirect(self: *Self, r: *const zap.SimpleRequest) !void {
-            try r.redirectTo(self.settings.auth_page, self.settings.redirect_code);
+            try r.redirectTo(self.settings.signin_url, self.settings.redirect_code);
         }
 
         fn createSessionToken(self: *Self, username: []const u8, password: []const u8) ![]const u8 {
