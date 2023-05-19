@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "serve": "npm run build && zig-out/bin/beachtube",
-    "dev-css": "npm run build-css -- --watch",
-    "build-css": "npx tailwindcss build -i web/css/main.css -o public/style.css",
+    "dev:css": "npm run build:css -- --watch",
+    "build:css": "npx tailwindcss build -i web/css/main.css -o public/style.css",
     "zap": "python -m http.server --directory ~/download",
     "build": "zig build",
-    "dev": "npm run build-css && npm run serve"
+    "dev": "npm run build:css && npm run dev"
   },
   "devDependencies": {
     "tailwindcss": "^3.3.2"
