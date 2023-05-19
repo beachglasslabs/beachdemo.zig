@@ -61,9 +61,10 @@ pub fn main() !void {
     defer session_endpoint.deinit();
 
     // create authenticator
-    const Authenticator = UserSession.SessionAuth(User, Session);
+    const Authenticator = UserSession.SessionAuth(Users, Sessions);
     const auth_args = UserSession.SessionAuthArgs{
-        .username_param = "email",
+        .name_param = "name",
+        .subject_param = "email",
         .password_param = "password",
         .signin_url = "/auth",
         .signup_url = "/auth",
@@ -75,7 +76,7 @@ pub fn main() !void {
         .cookie_maxage = 3,
         .redirect_code = zap.StatusCode.see_other,
     };
-    var authenticator = try Authenticator.init(allocator, &user_endpoint.users.users_by_email, &session_endpoint.sessions.sessions, auth_args);
+    var authenticator = try Authenticator.init(allocator, &user_endpoint.users, &session_endpoint.sessions, auth_args);
     defer authenticator.deinit();
 
     // create authenticating endpoint

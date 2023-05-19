@@ -101,6 +101,13 @@ pub fn delete(self: *Self, id: []const u8) bool {
     return self.users_by_email.remove(&user.mailbuf);
 }
 
+pub fn getBySub(self: *Self, sub: []const u8) ?User {
+    if (self.users_by_email.get(sub)) |user| {
+        return get(self, user.id);
+    }
+    return null;
+}
+
 pub fn get(self: *Self, id: []const u8) ?User {
     // we don't care about locking here, as our usage-pattern is unlikely to
     // get a user by id that is not known yet
