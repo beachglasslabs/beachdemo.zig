@@ -23,7 +23,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                     .post = post,
                     .put = put,
                     .delete = delete,
-                    //.patch = patch,
+                    .patch = patch,
                     .unauthorized = redirectTo,
                 }),
             };

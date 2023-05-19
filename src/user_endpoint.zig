@@ -23,7 +23,7 @@ pub fn init(
             .get = getUser,
             .post = addUser,
             .put = updateUser,
-            //.patch = updateUser,
+            .patch = updateUser,
             .delete = deleteUser,
         }),
     };
@@ -130,10 +130,9 @@ fn updateUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
         if (self.userIdFromPath(path)) |id| {
             if (self.users.get(id)) |_| {
                 if (r.body) |body| {
-                    var stream = std.json.TokenStream.init(body);
-                    var maybe_user: ?User = std.json.parse(User, &stream, .{ .allocator = self.alloc }) catch null;
+                    var maybe_user: ?User = std.json.parseFromSlice(User, self.alloc, body, .{}) catch null;
                     if (maybe_user) |u| {
-                        defer std.json.parseFree(User, u, .{ .allocator = self.alloc });
+                        defer std.json.parseFree(User, self.alloc, u);
                         var jsonbuf: [128]u8 = undefined;
                         if (self.users.update(id, u.name, u.email, u.password)) {
                             if (zap.stringifyBuf(&jsonbuf, .{ .status = "OK", .id = id }, .{})) |json| {

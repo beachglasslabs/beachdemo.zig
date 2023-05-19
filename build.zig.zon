@@ -3,12 +3,10 @@
     .version = "0.0.1",
 
     .dependencies = .{
-        // zap release-0.0.20
+        // zap release-0.0.21
         .zap = .{
-            // zap release-0.0.20-localhost as a workaround
-            //.url = "http://127.0.0.1:8000/release-0.0.20-localhost.tar.gz",
-            .url = "https://github.com/zigzap/zap/archive/refs/tags/release-0.0.20.tar.gz",
-            .hash = "12204c663be7639e98af40ad738780014b18bcf35efbdb4c701aad51c7dec45abf4d",
+            .url = "https://github.com/zigzap/zap/archive/refs/tags/release-0.0.21.tar.gz",
+            .hash = "12202384c46e9e2059fb5082c61c42aae2421edff233cb8cecef682114cbbabf7197",
         }
     }
 }
