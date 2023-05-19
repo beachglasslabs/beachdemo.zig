@@ -9,7 +9,7 @@ lock: std.Thread.Mutex = undefined,
 pub const Self = @This();
 
 const InternalUser = struct {
-    id: [36]u8 = undefined,
+    id: [36]u8,
     namebuf: [64]u8,
     namelen: usize,
     mailbuf: [64]u8,
@@ -75,11 +75,11 @@ pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8)
     defer self.lock.unlock();
     _ = try std.fmt.bufPrint(&user.id, "{s}", .{uuid.newV4()});
     if (self.users_by_id.put(&user.id, user)) {
-        std.debug.print("user {d} added\n", .{user.id});
+        std.debug.print("user {s} added\n", .{user.id});
         var newUser = self.get(&user.id).?;
-        std.debug.print("adding user: {s}\n", .{newUser.email});
+        std.debug.print("adding user: {s} as {s}\n", .{ newUser.email, newUser.id });
         if (self.users_by_email.put(newUser.email, newUser)) {
-            return &user.id;
+            return newUser.id;
         } else |err| {
             std.debug.print("add error: {}\n", .{err});
             // make sure we pass on the error

@@ -116,7 +116,7 @@ fn addUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     std.log.info("name={s}, email={s}, password={s}\n", .{ name.?, email.?, password.? });
 
     if (self.users.add(name, email, password)) |id| {
-        std.log.info("{s} registered as user {d}\n", .{ email.?, id });
+        std.log.info("{s} registered as user {s}\n", .{ email.?, id });
         r.redirectTo("/", zap.StatusCode.found) catch return;
     } else |err| {
         std.debug.print("ADDING error: {}\n", .{err});

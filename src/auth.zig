@@ -132,7 +132,7 @@ pub fn SessionAuth(comptime User: type, comptime Session: type) type {
                     }
                 }
             }
-            std.debug.print("in internal.authenticateRequest: going for auth]n", .{});
+            std.debug.print("in internal.authenticateRequest: going for auth\n", .{});
 
             // parse body
             r.parseBody() catch {
