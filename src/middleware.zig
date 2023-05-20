@@ -2,21 +2,21 @@ const std = @import("std");
 const zap = @import("zap");
 
 /// Wrap multiple endpoints
-pub fn Middleware(comptime Authenticator: type) type {
+pub fn Middleware(comptime Router: type, comptime Authenticator: type, comptime ContextType: type) type {
     return struct {
         endpoints: std.ArrayList(*zap.SimpleEndpoint),
         authenticator: *Authenticator,
-        handler: zap.SimpleHttpRequestFn,
-        redirect: zap.SimpleHttpRequestFn,
+        router: *Router,
         fascade: zap.SimpleEndpoint,
+
+        pub const RequestFn = *const fn (*Router, zap.SimpleRequest, *ContextType) void;
         const Self = @This();
 
-        pub fn init(a: std.mem.Allocator, handler: zap.SimpleHttpRequestFn, authenticator: *Authenticator, redirect: zap.SimpleHttpRequestFn) Self {
+        pub fn init(a: std.mem.Allocator, router: *Router, authenticator: *Authenticator) Self {
             return .{
                 .authenticator = authenticator,
                 .endpoints = std.ArrayList(*zap.SimpleEndpoint).init(a),
-                .handler = handler,
-                .redirect = redirect,
+                .router = router,
                 .fascade = zap.SimpleEndpoint.init(.{
                     .path = "/", // we do everything
                     .get = get,
@@ -60,7 +60,7 @@ pub fn Middleware(comptime Authenticator: type) type {
 
         pub fn redirectTo(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
             const myself: *Self = @fieldParentPtr(Self, "fascade", e);
-            return myself.redirect(r);
+            return myself.router.redirect(r);
         }
 
         /// here, the fascade will be passed in
@@ -73,7 +73,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                         unauthorized(&myself.fascade, r);
                         return;
                     } else {
-                        myself.redirect(r);
+                        myself.router.redirect(r);
                         return;
                     }
                 },
@@ -91,8 +91,8 @@ pub fn Middleware(comptime Authenticator: type) type {
                             }
                         }
                         if (!handled) {
-                            std.debug.print("in wrapper.get: passing to handler\n", .{});
-                            myself.handler(r);
+                            std.debug.print("in wrapper.get: passing to router\n", .{});
+                            myself.router.dispatch(r, null);
                         }
                     }
                 },
@@ -110,7 +110,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                         unauthorized(&myself.fascade, r);
                         return;
                     } else {
-                        myself.redirect(r);
+                        myself.router.redirect(r);
                         return;
                     }
                 },
@@ -125,7 +125,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                             }
                         }
                         if (!handled) {
-                            myself.handler(r);
+                            myself.router.dispatch(r, null);
                         }
                     }
                 },
@@ -142,7 +142,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                         unauthorized(&myself.fascade, r);
                         return;
                     } else {
-                        myself.redirect(r);
+                        myself.router.redirect(r);
                         return;
                     }
                 },
@@ -157,7 +157,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                             }
                         }
                         if (!handled) {
-                            myself.handler(r);
+                            myself.router.dispatch(r, null);
                         }
                     }
                 },
@@ -175,7 +175,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                         unauthorized(&myself.fascade, r);
                         return;
                     } else {
-                        myself.redirect(r);
+                        myself.router.redirect(r);
                         return;
                     }
                 },
@@ -190,7 +190,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                             }
                         }
                         if (!handled) {
-                            myself.handler(r);
+                            myself.router.dispatch(r, null);
                         }
                     }
                 },
@@ -207,7 +207,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                         unauthorized(&myself.fascade, r);
                         return;
                     } else {
-                        myself.redirect(r);
+                        myself.router.redirect(r);
                         return;
                     }
                 },
@@ -222,7 +222,7 @@ pub fn Middleware(comptime Authenticator: type) type {
                             }
                         }
                         if (!handled) {
-                            myself.handler(r);
+                            myself.router.dispatch(r, null);
                         }
                     }
                 },

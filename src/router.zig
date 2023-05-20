@@ -1,108 +1,125 @@
 const std = @import("std");
 const zap = @import("zap");
 
-var alloc: std.mem.Allocator = undefined;
-var gets: std.StringHashMap(zap.SimpleHttpRequestFn) = undefined;
-var puts: std.StringHashMap(zap.SimpleHttpRequestFn) = undefined;
-var posts: std.StringHashMap(zap.SimpleHttpRequestFn) = undefined;
-var deletes: std.StringHashMap(zap.SimpleHttpRequestFn) = undefined;
-var patches: std.StringHashMap(zap.SimpleHttpRequestFn) = undefined;
+pub fn Router(comptime ContextType: anytype) type {
+    return struct {
+        allocator: std.mem.Allocator = undefined,
+        redirect_url: []const u8 = undefined,
+        gets: std.StringHashMap(RequestFn) = undefined,
+        puts: std.StringHashMap(RequestFn) = undefined,
+        posts: std.StringHashMap(RequestFn) = undefined,
+        deletes: std.StringHashMap(RequestFn) = undefined,
+        patches: std.StringHashMap(RequestFn) = undefined,
 
-pub fn init(a: std.mem.Allocator) void {
-    alloc = a;
-    gets = std.StringHashMap(zap.SimpleHttpRequestFn).init(a);
-    posts = std.StringHashMap(zap.SimpleHttpRequestFn).init(a);
-    puts = std.StringHashMap(zap.SimpleHttpRequestFn).init(a);
-    deletes = std.StringHashMap(zap.SimpleHttpRequestFn).init(a);
-    patches = std.StringHashMap(zap.SimpleHttpRequestFn).init(a);
-}
+        pub const RequestFn = *const fn (*Self, zap.SimpleRequest, ?*ContextType) void;
+        const Self = @This();
 
-pub fn deinit() void {
-    gets.deinit();
-    posts.deinit();
-    puts.deinit();
-    deletes.deinit();
-    patches.deinit();
-}
+        pub fn init(allocator: std.mem.Allocator, redirect_url: []const u8) !Self {
+            return .{
+                .allocator = allocator,
+                .redirect_url = try allocator.dupe(u8, redirect_url),
+                .gets = std.StringHashMap(RequestFn).init(allocator),
+                .posts = std.StringHashMap(RequestFn).init(allocator),
+                .puts = std.StringHashMap(RequestFn).init(allocator),
+                .deletes = std.StringHashMap(RequestFn).init(allocator),
+                .patches = std.StringHashMap(RequestFn).init(allocator),
+            };
+        }
 
-pub fn get(path: []const u8, handler: zap.SimpleHttpRequestFn) !void {
-    try gets.put(path, handler);
-}
+        pub fn deinit(self: *Self) void {
+            self.allocator.free(self.redirect_url);
+            self.gets.deinit();
+            self.posts.deinit();
+            self.puts.deinit();
+            self.deletes.deinit();
+            self.patches.deinit();
+        }
 
-pub fn put(path: []const u8, handler: zap.SimpleHttpRequestFn) !void {
-    try puts.put(path, handler);
-}
+        pub fn redirect(self: *Self, r: zap.SimpleRequest) void {
+            r.redirectTo(self.redirect_url, zap.StatusCode.see_other) catch return;
+        }
 
-pub fn post(path: []const u8, handler: zap.SimpleHttpRequestFn) !void {
-    try posts.put(path, handler);
-}
+        pub fn get(self: *Self, path: []const u8, handler: RequestFn) !void {
+            try self.gets.put(path, handler);
+        }
 
-pub fn delete(path: []const u8, handler: zap.SimpleHttpRequestFn) !void {
-    try deletes.put(path, handler);
-}
+        pub fn put(self: *Self, path: []const u8, handler: RequestFn) !void {
+            try self.puts.put(path, handler);
+        }
 
-pub fn patch(path: []const u8, handler: zap.SimpleHttpRequestFn) !void {
-    try patches.put(path, handler);
-}
+        pub fn post(self: *Self, path: []const u8, handler: RequestFn) !void {
+            try self.posts.put(path, handler);
+        }
 
-pub fn dispatcher(r: zap.SimpleRequest) void {
-    std.debug.print("in dispatch:\n", .{});
-    if (r.query) |query| {
-        std.debug.print("QUERY: {s}\n", .{query});
-    }
+        pub fn delete(self: *Self, path: []const u8, handler: RequestFn) !void {
+            try self.deletes.put(path, handler);
+        }
 
-    if (r.path) |path| {
-        std.debug.print("PATH: {s}\n", .{path});
-        if (r.method) |method| {
-            if (std.mem.eql(u8, method, "GET")) {
-                if (gets.get(path)) |handler| {
-                    return handler(r);
-                }
-            } else if (std.mem.eql(u8, method, "POST")) {
-                if (posts.get(path)) |handler| {
-                    return handler(r);
-                }
-            } else if (std.mem.eql(u8, method, "PUT")) {
-                if (puts.get(path)) |handler| {
-                    return handler(r);
-                }
-            } else if (std.mem.eql(u8, method, "DELETE")) {
-                if (deletes.get(path)) |handler| {
-                    return handler(r);
-                }
-            } else if (std.mem.eql(u8, method, "PATCH")) {
-                if (patches.get(path)) |handler| {
-                    return handler(r);
+        pub fn patch(self: *Self, path: []const u8, handler: RequestFn) !void {
+            try self.patches.put(path, handler);
+        }
+
+        pub fn dispatch(self: *Self, r: zap.SimpleRequest, c: ?*ContextType) void {
+            std.debug.print("in dispatch:\n", .{});
+            if (r.query) |query| {
+                std.debug.print("QUERY: {s}\n", .{query});
+            }
+
+            if (r.path) |path| {
+                std.debug.print("PATH: {s}\n", .{path});
+                if (r.method) |method| {
+                    if (std.mem.eql(u8, method, "GET")) {
+                        if (self.gets.get(path)) |handler| {
+                            return handler(self, r, c);
+                        }
+                    } else if (std.mem.eql(u8, method, "POST")) {
+                        if (self.posts.get(path)) |handler| {
+                            return handler(self, r, c);
+                        }
+                    } else if (std.mem.eql(u8, method, "PUT")) {
+                        if (self.puts.get(path)) |handler| {
+                            return handler(self, r, c);
+                        }
+                    } else if (std.mem.eql(u8, method, "DELETE")) {
+                        if (self.deletes.get(path)) |handler| {
+                            return handler(self, r, c);
+                        }
+                    } else if (std.mem.eql(u8, method, "PATCH")) {
+                        if (self.patches.get(path)) |handler| {
+                            return handler(self, r, c);
+                        }
+                    }
                 }
             }
+
+            r.setStatus(zap.StatusCode.not_found);
+            r.sendBody("") catch return;
         }
-    }
 
-    r.setStatus(zap.StatusCode.not_found);
-    r.sendBody("<html><body><h1>Oops!</h1></body></html>") catch return;
-}
+        pub fn renderTemplate(self: *Self, r: zap.SimpleRequest, t: []const u8, m: anytype) !void {
+            const file = try std.fs.cwd().openFile(
+                t,
+                .{},
+            );
+            defer file.close();
 
-pub fn renderTemplate(r: zap.SimpleRequest, t: []const u8, m: anytype) !void {
-    const file = try std.fs.cwd().openFile(
-        t,
-        .{},
-    );
-    defer file.close();
+            const size = (try file.stat()).size;
 
-    const size = (try file.stat()).size;
+            const template = try file.reader().readAllAlloc(self.allocator, size);
 
-    const template = try file.reader().readAllAlloc(alloc, size);
-
-    const p = try zap.MustacheNew(template);
-    defer zap.MustacheFree(p);
-    const ret = zap.MustacheBuild(p, m);
-    defer ret.deinit();
-    if (r.setContentType(.HTML)) {
-        if (ret.str()) |resp| {
-            try r.sendBody(resp);
-        } else {
-            try r.sendBody("<html><body><h1>MustacheBuild() failed!</h1></body></html>");
+            const p = try zap.MustacheNew(template);
+            defer zap.MustacheFree(p);
+            const ret = zap.MustacheBuild(p, m);
+            defer ret.deinit();
+            if (r.setContentType(.HTML)) {
+                if (ret.str()) |resp| {
+                    try r.sendBody(resp);
+                } else {
+                    r.setStatus(zap.StatusCode.not_found);
+                    try r.sendBody("");
+                }
+            } else |err| return err;
+            return;
         }
-    } else |err| return err;
-    return;
+    };
 }

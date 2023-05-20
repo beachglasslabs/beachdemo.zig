@@ -10,16 +10,16 @@ const Sessions = @import("sessions.zig");
 const User = Users.User;
 const Session = Sessions.Session;
 
-fn auth(r: zap.SimpleRequest) void {
-    Router.renderTemplate(r, "web/templates/auth.html", .{}) catch return;
+fn auth(router: *Router.Router(User), r: zap.SimpleRequest, _: ?*User) void {
+    router.renderTemplate(r, "web/templates/auth.html", .{}) catch return;
 }
 
-fn index(r: zap.SimpleRequest) void {
-    Router.renderTemplate(r, "web/templates/index.html", .{ .name = "hello", .avatar = "/img/default-red.png" }) catch return;
+fn index(router: *Router.Router(User), r: zap.SimpleRequest, _: ?*User) void {
+    router.renderTemplate(r, "web/templates/index.html", .{ .name = "hello", .avatar = "/img/default-red.png" }) catch return;
 }
 
-fn profiles(r: zap.SimpleRequest) void {
-    Router.renderTemplate(r, "web/templates/profiles.html", .{ .name = "hello", .avatar = "/img/default-blue.png" }) catch return;
+fn profiles(router: *Router.Router(User), r: zap.SimpleRequest, _: ?*User) void {
+    router.renderTemplate(r, "web/templates/profiles.html", .{ .name = "hello", .avatar = "/img/default-blue.png" }) catch return;
 }
 
 fn redirect(r: zap.SimpleRequest) void {
@@ -33,12 +33,13 @@ pub fn main() !void {
     var allocator = gpa.allocator();
 
     // setup routes
-    Router.init(allocator);
-    defer Router.deinit();
+    const MainRouter = Router.Router(User);
+    var router = try MainRouter.init(allocator, "/auth");
+    defer router.deinit();
 
-    try Router.get("/", index);
-    try Router.get("/auth", auth);
-    try Router.get("/profiles", profiles);
+    try router.get("/", index);
+    try router.get("/auth", auth);
+    try router.get("/profiles", profiles);
 
     // setup listener
     var listener = zap.SimpleEndpointListener.init(
@@ -79,8 +80,8 @@ pub fn main() !void {
     defer authenticator.deinit();
 
     // create authenticating endpoint
-    const AuthMiddleware = Middleware.Middleware(Authenticator);
-    var auth_wrapper = AuthMiddleware.init(allocator, Router.dispatcher, &authenticator, redirect);
+    const AuthMiddleware = Middleware.Middleware(Router.Router(User), Authenticator, User);
+    var auth_wrapper = AuthMiddleware.init(allocator, &router, &authenticator);
     try auth_wrapper.addEndpoint(user_endpoint.getEndpoint());
     try auth_wrapper.addEndpoint(session_endpoint.getEndpoint());
 
