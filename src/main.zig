@@ -33,8 +33,7 @@ pub fn main() !void {
     var allocator = gpa.allocator();
 
     // setup routes
-    const MainRouter = Router.Router(User);
-    var router = try MainRouter.init(allocator, "/auth");
+    var router = try Router.Router(User).init(allocator, "/auth");
     defer router.deinit();
 
     try router.get("/", index);
@@ -58,7 +57,7 @@ pub fn main() !void {
     var user_endpoint = UserEndpoint.init(allocator, "/users");
     defer user_endpoint.deinit();
 
-    var session_endpoint = SessionEndpoint.init(allocator, "/session", &user_endpoint.users);
+    var session_endpoint = SessionEndpoint.init(allocator, "/sessions", &user_endpoint.users);
     defer session_endpoint.deinit();
 
     // create authenticator
@@ -70,7 +69,7 @@ pub fn main() !void {
         .signin_url = "/auth",
         .signup_url = "/auth",
         .success_url = "/profiles",
-        .signin_callback = "/session",
+        .signin_callback = "/sessions",
         .signup_callback = "/users",
         .cookie_name = "token",
         .cookie_maxage = 1337,
@@ -80,7 +79,7 @@ pub fn main() !void {
     defer authenticator.deinit();
 
     // create authenticating endpoint
-    const AuthMiddleware = Middleware.Middleware(Router.Router(User), Authenticator, User);
+    const AuthMiddleware = Middleware.Middleware(Router.Router(User), Authenticator, zap.AuthResult);
     var auth_wrapper = AuthMiddleware.init(allocator, &router, &authenticator);
     try auth_wrapper.addEndpoint(user_endpoint.getEndpoint());
     try auth_wrapper.addEndpoint(session_endpoint.getEndpoint());
