@@ -103,7 +103,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
             if (r.setCookie(.{
                 .name = self.settings.cookie_name,
                 .value = "invalid",
-                .max_age_s = self.settings.cookie_maxage,
+                .max_age_s = -1,
             })) {
                 std.debug.print("logout ok\n", .{});
             } else |err| {
@@ -198,7 +198,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                                                 std.debug.print("password matches for {s} {s}\n", .{ user.email, user.id });
 
                                                 if (self.createAndStoreSessionToken(subject.str, password.str)) |token| {
-                                                    std.debug.print("token created {s}", .{token});
+                                                    std.debug.print("token created {s}\n", .{token});
                                                     // now set the cookie header
                                                     if (r.setCookie(.{
                                                         .name = self.settings.cookie_name,
@@ -250,6 +250,8 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                         } else {
                             std.debug.print("Auth: COOKIE IS BAD!!!!: {s}\n", .{cookie.str});
                         }
+                    } else {
+                        std.debug.print("in internal.authenticateRequest: no {s} cookie found\n", .{self.settings.cookie_name});
                     }
                 } else |err| {
                     std.debug.print("unreachable: could not check for cookie in SessionAuth: {any}", .{err});
@@ -310,12 +312,11 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
         fn createAndStoreSessionToken(self: *Self, subject: []const u8, password: []const u8) ![]const u8 {
             const token = try self.createSessionToken(subject, password);
             // put locked or not
-            std.debug.print("create token={s}", .{token});
+            std.debug.print("create token={s}\n", .{token});
             if (!self.sessionTokens.contains(token)) {
-                std.debug.print("putting token={s}", .{token});
+                std.debug.print("putting token={s}\n", .{token});
                 try self.sessionTokens.put(token, {});
             }
-            std.debug.print("token stored token={s}", .{token});
             return token;
         }
     };

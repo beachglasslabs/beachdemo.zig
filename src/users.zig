@@ -120,12 +120,6 @@ pub fn getBySub(self: *Self, sub: []const u8) ?User {
 pub fn getById(self: *Self, id: []const u8) ?User {
     // we don't care about locking here, as our usage-pattern is unlikely to
     // get a user by id that is not known yet
-    std.debug.print("getById {s}\n", .{id});
-    std.debug.print("getById has {d} users\n", .{self.users_by_id.count()});
-    var keyIter = self.users_by_id.keyIterator();
-    while (keyIter.next()) |key| {
-        std.debug.print("getById include {s}!!!!{s}\n", .{ key, key.* });
-    }
     if (self.users_by_id.getPtr(id)) |pUser| {
         std.debug.print("getById found {s}\n", .{pUser.id});
         return .{

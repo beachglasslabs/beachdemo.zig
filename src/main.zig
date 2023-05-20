@@ -72,7 +72,7 @@ pub fn main() !void {
         .signin_callback = "/session",
         .signup_callback = "/users",
         .cookie_name = "token",
-        .cookie_maxage = 3,
+        .cookie_maxage = 1337,
         .redirect_code = zap.StatusCode.see_other,
     };
     var authenticator = try Authenticator.init(allocator, &user_endpoint.users, &session_endpoint.sessions, auth_args);
