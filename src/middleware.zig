@@ -167,6 +167,7 @@ pub fn Middleware(comptime Authenticator: type) type {
 
         /// here, the fascade will be passed in
         pub fn delete(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
+            std.debug.print("in wrapper.delete\n", .{});
             const myself: *Self = @fieldParentPtr(Self, "fascade", e);
             switch (myself.authenticator.authenticateRequest(&r)) {
                 .AuthFailed => {

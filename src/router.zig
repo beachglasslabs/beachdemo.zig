@@ -2,36 +2,47 @@ const std = @import("std");
 const zap = @import("zap");
 
 var alloc: std.mem.Allocator = undefined;
-var routes: std.StringHashMap(zap.SimpleHttpRequestFn) = undefined;
+var gets: std.StringHashMap(zap.SimpleHttpRequestFn) = undefined;
+var puts: std.StringHashMap(zap.SimpleHttpRequestFn) = undefined;
+var posts: std.StringHashMap(zap.SimpleHttpRequestFn) = undefined;
+var deletes: std.StringHashMap(zap.SimpleHttpRequestFn) = undefined;
+var patches: std.StringHashMap(zap.SimpleHttpRequestFn) = undefined;
 
 pub fn init(a: std.mem.Allocator) void {
     alloc = a;
-    routes = std.StringHashMap(zap.SimpleHttpRequestFn).init(a);
+    gets = std.StringHashMap(zap.SimpleHttpRequestFn).init(a);
+    posts = std.StringHashMap(zap.SimpleHttpRequestFn).init(a);
+    puts = std.StringHashMap(zap.SimpleHttpRequestFn).init(a);
+    deletes = std.StringHashMap(zap.SimpleHttpRequestFn).init(a);
+    patches = std.StringHashMap(zap.SimpleHttpRequestFn).init(a);
 }
 
 pub fn deinit() void {
-    routes.deinit();
+    gets.deinit();
+    posts.deinit();
+    puts.deinit();
+    deletes.deinit();
+    patches.deinit();
 }
 
-// TODO route based on method too
 pub fn get(path: []const u8, handler: zap.SimpleHttpRequestFn) !void {
-    try routes.put(path, handler);
+    try gets.put(path, handler);
 }
 
 pub fn put(path: []const u8, handler: zap.SimpleHttpRequestFn) !void {
-    try get(path, handler);
+    try puts.put(path, handler);
 }
 
 pub fn post(path: []const u8, handler: zap.SimpleHttpRequestFn) !void {
-    try get(path, handler);
+    try posts.put(path, handler);
 }
 
 pub fn delete(path: []const u8, handler: zap.SimpleHttpRequestFn) !void {
-    try get(path, handler);
+    try deletes.put(path, handler);
 }
 
 pub fn patch(path: []const u8, handler: zap.SimpleHttpRequestFn) !void {
-    try get(path, handler);
+    try patches.put(path, handler);
 }
 
 pub fn dispatcher(r: zap.SimpleRequest) void {
@@ -42,8 +53,28 @@ pub fn dispatcher(r: zap.SimpleRequest) void {
 
     if (r.path) |path| {
         std.debug.print("PATH: {s}\n", .{path});
-        if (routes.get(path)) |handler| {
-            return handler(r);
+        if (r.method) |method| {
+            if (std.mem.eql(u8, method, "GET")) {
+                if (gets.get(path)) |handler| {
+                    return handler(r);
+                }
+            } else if (std.mem.eql(u8, method, "POST")) {
+                if (posts.get(path)) |handler| {
+                    return handler(r);
+                }
+            } else if (std.mem.eql(u8, method, "PUT")) {
+                if (puts.get(path)) |handler| {
+                    return handler(r);
+                }
+            } else if (std.mem.eql(u8, method, "DELETE")) {
+                if (deletes.get(path)) |handler| {
+                    return handler(r);
+                }
+            } else if (std.mem.eql(u8, method, "PATCH")) {
+                if (patches.get(path)) |handler| {
+                    return handler(r);
+                }
+            }
         }
     }
 

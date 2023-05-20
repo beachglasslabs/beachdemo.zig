@@ -15,7 +15,7 @@ fn auth(r: zap.SimpleRequest) void {
 }
 
 fn index(r: zap.SimpleRequest) void {
-    Router.renderTemplate(r, "web/templates/index.html", .{}) catch return;
+    Router.renderTemplate(r, "web/templates/index.html", .{ .name = "hello", .avatar = "/img/default-red.png" }) catch return;
 }
 
 fn profiles(r: zap.SimpleRequest) void {
