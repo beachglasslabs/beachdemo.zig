@@ -9,7 +9,7 @@ lock: std.Thread.Mutex = undefined,
 pub const Self = @This();
 
 const InternalUser = struct {
-    id: [36]u8 = undefined,
+    id: []const u8 = undefined,
     namebuf: [64]u8 = undefined,
     namelen: usize = undefined,
     mailbuf: [64]u8 = undefined,
@@ -75,9 +75,9 @@ pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8)
     // We lock only on insertion, deletion, and listing
     self.lock.lock();
     defer self.lock.unlock();
-    _ = try std.fmt.bufPrint(&user.id, "{s}", .{uuid.newV4()});
-    if (self.users_by_id.put(&user.id, user)) {
-        var newUser = self.getById(&user.id).?;
+    user.id = try std.fmt.allocPrint(self.alloc, "{s}", .{uuid.newV4()});
+    if (self.users_by_id.put(user.id, user)) {
+        var newUser = self.getById(user.id).?;
         std.debug.print("adding user: {s} as {s}\n", .{ newUser.email, newUser.id });
         if (self.users_by_email.put(newUser.email, newUser)) {
             std.debug.print("user.id:{s} added\n", .{newUser.id});
@@ -105,9 +105,9 @@ pub fn delete(self: *Self, id: []const u8) bool {
 
 pub fn getBySub(self: *Self, sub: []const u8) ?User {
     std.debug.print("getBySub {s}\n", .{sub});
-    if (self.users_by_email.get(sub)) |user| {
-        std.debug.print("getBySub found {s}\n", .{user.id});
-        return getById(self, user.id);
+    if (self.users_by_email.getPtr(sub)) |pUser| {
+        std.debug.print("getBySub found {s}\n", .{pUser.id});
+        return getById(self, pUser.id);
     }
     return null;
 }

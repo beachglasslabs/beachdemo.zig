@@ -195,7 +195,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                                             std.debug.print("in internal.authenticateRequest: checking password {s}\n", .{password.str});
                                             if (user.checkPassword(password.str)) {
                                                 // create session token
-                                                std.debug.print("password matches for {s} {s}", .{ user.email, user.id });
+                                                std.debug.print("password matches for {s} {s}\n", .{ user.email, user.id });
 
                                                 if (self.createAndStoreSessionToken(subject.str, password.str)) |token| {
                                                     std.debug.print("token created {s}", .{token});
@@ -207,15 +207,15 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                                                     })) {
                                                         return .Handled;
                                                     } else |err| {
-                                                        std.debug.print("could not set session token: {any}", .{err});
+                                                        std.debug.print("could not set session token: {any}\n", .{err});
                                                     }
                                                 } else |err| {
-                                                    std.debug.print("could not create session token: {any}", .{err});
+                                                    std.debug.print("could not create session token: {any}\n", .{err});
                                                 }
                                                 // errors with token don't mean the auth itself wasn't OK
                                                 return .Handled;
                                             } else {
-                                                std.debug.print("password didn't match in SessionAuth", .{});
+                                                std.debug.print("password didn't match in SessionAuth\n", .{});
                                                 return .AuthFailed;
                                             }
                                         }
