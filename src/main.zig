@@ -19,7 +19,7 @@ fn index(r: zap.SimpleRequest) void {
 }
 
 fn profiles(r: zap.SimpleRequest) void {
-    Router.renderTemplate(r, "web/templates/profiles.html", .{}) catch return;
+    Router.renderTemplate(r, "web/templates/profiles.html", .{ .name = "hello", .avatar = "/img/default-blue.png" }) catch return;
 }
 
 fn redirect(r: zap.SimpleRequest) void {

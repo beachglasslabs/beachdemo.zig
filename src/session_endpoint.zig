@@ -25,7 +25,6 @@ pub fn init(
         .endpoint = zap.SimpleEndpoint.init(.{
             .path = session_path,
             .get = getSession,
-            .post = createSession,
             .delete = deleteSession,
         }),
     };
@@ -78,58 +77,6 @@ fn listSessions(self: *Self, r: zap.SimpleRequest) void {
     } else |err| {
         std.debug.print("LIST error: {}\n", .{err});
     }
-}
-
-fn createSession(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
-    const self = @fieldParentPtr(Self, "endpoint", e);
-
-    // check for FORM parameters
-    r.parseBody() catch |err| {
-        std.log.err("Parse Body error: {any}. Expected if body is empty", .{err});
-        return r.redirectTo("/auth", zap.StatusCode.found) catch return;
-    };
-
-    var param_count = r.getParamCount();
-    std.log.info("param count: {}", .{param_count});
-
-    var email: ?[]const u8 = null;
-    var password: ?[]const u8 = null;
-
-    var strparams = r.parametersToOwnedStrList(self.alloc, false) catch unreachable;
-    defer strparams.deinit();
-    std.debug.print("\n", .{});
-    for (strparams.items) |kv| {
-        std.log.info("ParamStr `{s}` is `{s}`", .{ kv.key.str, kv.value.str });
-        if (std.mem.eql(u8, "email", kv.key.str)) {
-            email = kv.value.str;
-        }
-        if (std.mem.eql(u8, "password", kv.key.str)) {
-            password = kv.value.str;
-        }
-    }
-
-    std.log.info("email={s}, password={s}\n", .{ email.?, password.? });
-    if (email == null or password == null) {
-        std.debug.print("bad credentials\n", .{});
-        return r.redirectTo("/auth", zap.StatusCode.found) catch return;
-    }
-
-    if (self.users.users_by_email.get(email.?)) |user| {
-        std.debug.print("got user by {s}\n", .{email.?});
-        if (user.checkPassword(password.?)) {
-            std.debug.print("password is correct\n", .{});
-            if (self.sessions.login(&(self.users.getById(user.id)).?)) |id| {
-                std.log.info("user {s} logged in new session {s}\n", .{ user.email, id });
-                return r.redirectTo("/", zap.StatusCode.found) catch return;
-            } else |err| {
-                std.debug.print("ADDING error: {}\n", .{err});
-            }
-        }
-    } else {
-        std.debug.print("no users by email {s}\n", .{email.?});
-        std.debug.print("users {}\n", .{self.users});
-    }
-    return r.redirectTo("/auth", zap.StatusCode.found) catch return;
 }
 
 fn deleteSession(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
