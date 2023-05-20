@@ -6,11 +6,10 @@ pub const SessionAuthArgs = struct {
     subject_param: []const u8,
     password_param: []const u8,
     signin_url: []const u8, // login page
-    signin_callback: []const u8, // the api endpoint for start a new session
-    signin_success: []const u8, // redirect page after successful login
     signup_url: []const u8, // register page
+    success_url: []const u8, // redirect page after successful login/register
+    signin_callback: []const u8, // the api endpoint for start a new session
     signup_callback: []const u8, // the api endpoint for adding a new user
-    signup_success: []const u8, // redirect page after successful register
     cookie_name: []const u8,
     /// cookie max age in seconds; 0 -> session cookie
     cookie_maxage: i32 = 0,
@@ -85,11 +84,10 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                     .subject_param = args.subject_param,
                     .password_param = args.password_param,
                     .signin_url = args.signin_url,
-                    .signin_callback = args.signin_callback,
-                    .signin_success = args.signin_success,
                     .signup_url = args.signup_url,
+                    .success_url = args.success_url,
+                    .signin_callback = args.signin_callback,
                     .signup_callback = args.signup_callback,
-                    .signup_success = args.signup_success,
                     .cookie_name = args.cookie_name,
                     .cookie_maxage = args.cookie_maxage,
                     .redirect_code = args.redirect_code,
@@ -176,7 +174,11 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                                                         std.debug.print("cannot add {s}: {}\n", .{ subject.str, err });
                                                         return .AuthFailed;
                                                     };
-                                                    std.debug.print("{s} added as user {s}\n", .{ subject.str, id });
+                                                    if (self.users.getBySub(subject.str)) |user| {
+                                                        std.debug.print("{s} added as user {s}\n", .{ user.email, user.id });
+                                                    } else {
+                                                        std.debug.print("{s} cannot be found {s}\n", .{ subject.str, id });
+                                                    }
                                                     login = true;
                                                 }
                                             }
@@ -185,21 +187,25 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                                             return .AuthFailed;
                                         }
                                     }
+                                    std.debug.print("in internal.authenticateRequest: login:{}\n", .{login});
                                     if (login) {
                                         // now check
+                                        std.debug.print("in internal.authenticateRequest: login for {s}\n", .{subject.str});
                                         if (self.users.getBySub(subject.str)) |user| {
+                                            std.debug.print("in internal.authenticateRequest: checking password {s}\n", .{password.str});
                                             if (user.checkPassword(password.str)) {
                                                 // create session token
                                                 std.debug.print("password matches for {s} {s}", .{ user.email, user.id });
 
                                                 if (self.createAndStoreSessionToken(subject.str, password.str)) |token| {
+                                                    std.debug.print("token created {s}", .{token});
                                                     // now set the cookie header
                                                     if (r.setCookie(.{
                                                         .name = self.settings.cookie_name,
                                                         .value = token,
                                                         .max_age_s = self.settings.cookie_maxage,
                                                     })) {
-                                                        return .AuthOK;
+                                                        return .Handled;
                                                     } else |err| {
                                                         std.debug.print("could not set session token: {any}", .{err});
                                                     }
@@ -207,7 +213,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                                                     std.debug.print("could not create session token: {any}", .{err});
                                                 }
                                                 // errors with token don't mean the auth itself wasn't OK
-                                                return .AuthOK;
+                                                return .Handled;
                                             } else {
                                                 std.debug.print("password didn't match in SessionAuth", .{});
                                                 return .AuthFailed;
@@ -235,6 +241,8 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                     if (maybe_cookie) |cookie| {
                         defer cookie.deinit();
                         // locked or unlocked token lookup
+                        std.debug.print("in internal.authenticateRequest: cookie {s}\n", .{cookie.str});
+                        std.debug.print("in internal.authenticateRequest: sessions has {d} tokens\n", .{self.sessionTokens.count()});
                         if (self.sessionTokens.contains(cookie.str)) {
                             // cookie is a valid session!
                             std.debug.print("Auth: COOKIE IS OK!!!!: {s}\n", .{cookie.str});
@@ -256,15 +264,23 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
             switch (self._internal_authenticateRequest(r)) {
                 .AuthOK => {
                     std.debug.print("in auth.authenticateRequest returning .AuthOk\n", .{});
-                    // subject and pass are ok -> created token, set header, caller can continue
                     return .AuthOK;
                 },
                 // this does not happen, just for completeness
-                .Handled => return .Handled,
+                .Handled => {
+                    // subject and pass are ok -> created token, set header, caller can continue
+                    std.debug.print("in auth.authenticateRequest returning .Handled\n", .{});
+
+                    self.redirectSuccess(r) catch |err| {
+                        // we just give up
+                        std.debug.print("redirectSuccess() failed in SessionAuth: {any}", .{err});
+                    };
+                    return .Handled;
+                },
                 // auth failed -> redirect
                 .AuthFailed => {
                     // we need to redirect and return .Handled
-                    self.redirect(r) catch |err| {
+                    self.redirectFailure(r) catch |err| {
                         // we just give up
                         std.debug.print("redirect() failed in SessionAuth: {any}", .{err});
                     };
@@ -273,7 +289,10 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
             }
         }
 
-        fn redirect(self: *Self, r: *const zap.SimpleRequest) !void {
+        fn redirectSuccess(self: *Self, r: *const zap.SimpleRequest) !void {
+            try r.redirectTo(self.settings.success_url, self.settings.redirect_code);
+        }
+        fn redirectFailure(self: *Self, r: *const zap.SimpleRequest) !void {
             try r.redirectTo(self.settings.signin_url, self.settings.redirect_code);
         }
 
@@ -291,9 +310,12 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
         fn createAndStoreSessionToken(self: *Self, subject: []const u8, password: []const u8) ![]const u8 {
             const token = try self.createSessionToken(subject, password);
             // put locked or not
+            std.debug.print("create token={s}", .{token});
             if (!self.sessionTokens.contains(token)) {
+                std.debug.print("putting token={s}", .{token});
                 try self.sessionTokens.put(token, {});
             }
+            std.debug.print("token stored token={s}", .{token});
             return token;
         }
     };

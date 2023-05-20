@@ -9,13 +9,13 @@ lock: std.Thread.Mutex = undefined,
 pub const Self = @This();
 
 const InternalUser = struct {
-    id: [36]u8,
-    namebuf: [64]u8,
-    namelen: usize,
-    mailbuf: [64]u8,
-    maillen: usize,
-    passbuf: [64]u8,
-    passlen: usize,
+    id: [36]u8 = undefined,
+    namebuf: [64]u8 = undefined,
+    namelen: usize = undefined,
+    mailbuf: [64]u8 = undefined,
+    maillen: usize = undefined,
+    passbuf: [64]u8 = undefined,
+    passlen: usize = undefined,
 };
 
 pub const User = struct {
@@ -25,7 +25,9 @@ pub const User = struct {
     password: []const u8,
 
     pub fn checkPassword(self: *const User, password: []const u8) bool {
+        std.debug.print("checking user.password:{s} with password:{s}\n", .{ self.password, password });
         if (std.mem.eql(u8, self.password, password)) {
+            std.debug.print("password is same\n", .{});
             return true;
         }
 
@@ -75,10 +77,10 @@ pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8)
     defer self.lock.unlock();
     _ = try std.fmt.bufPrint(&user.id, "{s}", .{uuid.newV4()});
     if (self.users_by_id.put(&user.id, user)) {
-        std.debug.print("user {s} added\n", .{user.id});
-        var newUser = self.get(&user.id).?;
+        var newUser = self.getById(&user.id).?;
         std.debug.print("adding user: {s} as {s}\n", .{ newUser.email, newUser.id });
         if (self.users_by_email.put(newUser.email, newUser)) {
+            std.debug.print("user.id:{s} added\n", .{newUser.id});
             return newUser.id;
         } else |err| {
             std.debug.print("add error: {}\n", .{err});
@@ -102,22 +104,33 @@ pub fn delete(self: *Self, id: []const u8) bool {
 }
 
 pub fn getBySub(self: *Self, sub: []const u8) ?User {
+    std.debug.print("getBySub {s}\n", .{sub});
     if (self.users_by_email.get(sub)) |user| {
-        return get(self, user.id);
+        std.debug.print("getBySub found {s}\n", .{user.id});
+        return getById(self, user.id);
     }
     return null;
 }
 
-pub fn get(self: *Self, id: []const u8) ?User {
+pub fn getById(self: *Self, id: []const u8) ?User {
     // we don't care about locking here, as our usage-pattern is unlikely to
     // get a user by id that is not known yet
+    std.debug.print("getById {s}\n", .{id});
+    std.debug.print("getById has {d} users\n", .{self.users_by_id.count()});
+    var keyIter = self.users_by_id.keyIterator();
+    while (keyIter.next()) |key| {
+        std.debug.print("getById include {s}!!!!{s}\n", .{ key, key.* });
+    }
     if (self.users_by_id.getPtr(id)) |pUser| {
+        std.debug.print("getById found {s}\n", .{pUser.id});
         return .{
-            .id = &pUser.id,
+            .id = pUser.id[0..36],
             .name = pUser.namebuf[0..pUser.namelen],
             .email = pUser.mailbuf[0..pUser.maillen],
             .password = pUser.passbuf[0..pUser.passlen],
         };
+    } else {
+        std.debug.print("getById cannot find {s}\n", .{id});
     }
     return null;
 }
@@ -223,7 +236,7 @@ const JsonUserIteratorWithRaceCondition = struct {
             // SEE ABOVE NOTE regarding race condition why this is can be problematic
             var user: User = .{
                 // we don't need .* syntax but want to make it obvious
-                .id = &pUser.*.id,
+                .id = pUser.*.id[0..36],
                 .name = pUser.*.namebuf[0..pUser.*.namelen],
                 .email = pUser.*.mailbuf[0..pUser.*.maillen],
                 .password = pUser.*.passbuf[0..pUser.*.passlen],

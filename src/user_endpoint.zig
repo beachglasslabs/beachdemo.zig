@@ -60,7 +60,7 @@ fn getUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
         }
         var jsonbuf: [256]u8 = undefined;
         if (self.userIdFromPath(path)) |id| {
-            if (self.users.get(id)) |user| {
+            if (self.users.getById(id)) |user| {
                 if (zap.stringifyBuf(&jsonbuf, user, .{})) |json| {
                     r.sendJson(json) catch return;
                 }
@@ -128,7 +128,7 @@ fn updateUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     const self = @fieldParentPtr(Self, "endpoint", e);
     if (r.path) |path| {
         if (self.userIdFromPath(path)) |id| {
-            if (self.users.get(id)) |_| {
+            if (self.users.getById(id)) |_| {
                 if (r.body) |body| {
                     var maybe_user: ?User = std.json.parseFromSlice(User, self.alloc, body, .{}) catch null;
                     if (maybe_user) |u| {

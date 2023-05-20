@@ -118,7 +118,7 @@ fn createSession(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
         std.debug.print("got user by {s}\n", .{email.?});
         if (user.checkPassword(password.?)) {
             std.debug.print("password is correct\n", .{});
-            if (self.sessions.login(&(self.users.get(user.id)).?)) |id| {
+            if (self.sessions.login(&(self.users.getById(user.id)).?)) |id| {
                 std.log.info("user {s} logged in new session {s}\n", .{ user.email, id });
                 return r.redirectTo("/", zap.StatusCode.found) catch return;
             } else |err| {
