@@ -80,15 +80,15 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                 .users = users,
                 .sessions = sessions,
                 .settings = .{
-                    .name_param = args.name_param,
-                    .subject_param = args.subject_param,
-                    .password_param = args.password_param,
-                    .signin_url = args.signin_url,
-                    .signup_url = args.signup_url,
-                    .success_url = args.success_url,
-                    .signin_callback = args.signin_callback,
-                    .signup_callback = args.signup_callback,
-                    .cookie_name = args.cookie_name,
+                    .name_param = try allocator.dupe(u8, args.name_param),
+                    .subject_param = try allocator.dupe(u8, args.subject_param),
+                    .password_param = try allocator.dupe(u8, args.password_param),
+                    .signin_url = try allocator.dupe(u8, args.signin_url),
+                    .signup_url = try allocator.dupe(u8, args.signup_url),
+                    .success_url = try allocator.dupe(u8, args.success_url),
+                    .signin_callback = try allocator.dupe(u8, args.signin_callback),
+                    .signup_callback = try allocator.dupe(u8, args.signup_callback),
+                    .cookie_name = try allocator.dupe(u8, args.cookie_name),
                     .cookie_maxage = args.cookie_maxage,
                     .redirect_code = args.redirect_code,
                 },
@@ -125,6 +125,14 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
         }
 
         pub fn deinit(self: *const Self) void {
+            self.allocator.free(self.settings.name_param);
+            self.allocator.free(self.settings.subject_param);
+            self.allocator.free(self.settings.password_param);
+            self.allocator.free(self.settings.signin_url);
+            self.allocator.free(self.settings.signup_url);
+            self.allocator.free(self.settings.success_url);
+            self.allocator.free(self.settings.signin_callback);
+            self.allocator.free(self.settings.signup_callback);
             self.allocator.free(self.settings.cookie_name);
         }
 
