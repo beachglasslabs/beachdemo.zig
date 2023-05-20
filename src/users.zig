@@ -46,6 +46,10 @@ pub fn init(a: std.mem.Allocator) Self {
 
 pub fn deinit(self: *Self) void {
     self.users_by_email.deinit();
+    var iter = self.users_by_id.valueIterator();
+    while (iter.next()) |user| {
+        defer self.alloc.free(user.id);
+    }
     self.users_by_id.deinit();
 }
 
@@ -100,6 +104,7 @@ pub fn delete(self: *Self, id: []const u8) bool {
     defer self.lock.unlock();
 
     const user = self.users_by_id.fetchRemove(id).?.value;
+    defer self.alloc.free(user.id);
     return self.users_by_email.remove(&user.mailbuf);
 }
 
