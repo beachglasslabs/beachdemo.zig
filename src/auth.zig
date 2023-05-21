@@ -96,6 +96,33 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
             };
         }
 
+        // this only log you in via cookie session
+        pub fn login(self: *Self, r: *const zap.SimpleRequest) zap.AuthResult {
+            r.parseCookies(false);
+
+            // check for session cookie
+            if (r.getCookieStr(self.settings.cookie_name, self.allocator, false)) |maybe_cookie| {
+                if (maybe_cookie) |cookie| {
+                    defer cookie.deinit();
+                    // locked or unlocked token lookup
+                    std.debug.print("in internal.authenticateRequest: cookie {s}\n", .{cookie.str});
+                    std.debug.print("in internal.authenticateRequest: sessions has {d} tokens\n", .{self.sessionTokens.count()});
+                    if (self.sessionTokens.contains(cookie.str)) {
+                        // cookie is a valid session!
+                        std.debug.print("Auth: COOKIE IS OK!!!!: {s}\n", .{cookie.str});
+                        return .AuthOK;
+                    } else {
+                        std.debug.print("Auth: COOKIE IS BAD!!!!: {s}\n", .{cookie.str});
+                    }
+                } else {
+                    std.debug.print("in internal.authenticateRequest: no {s} cookie found\n", .{self.settings.cookie_name});
+                }
+            } else |err| {
+                std.debug.print("unreachable: could not check for cookie in SessionAuth: {any}", .{err});
+            }
+            return .AuthFailed;
+        }
+
         /// Check for session token cookie, remove the token from the valid tokens
         /// Note: only valid if lockedTokenLookups == true
         pub fn logout(self: *Self, r: *const zap.SimpleRequest) void {
@@ -110,14 +137,19 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                 std.debug.print("logout cookie setting failed: {any}\n", .{err});
             }
 
-            r.parseCookies();
+            r.parseCookies(false);
 
             // check for session cookie
             if (r.getCookieStr(self.settings.cookie_name, self.allocator, false)) |maybe_cookie| {
                 if (maybe_cookie) |cookie| {
+                    std.debug.print("logout removing cookie {s}\n", .{cookie.str});
                     defer cookie.deinit();
                     // if cookie is a valid session, remove it!
-                    _ = self.sessionTokens.remove(cookie);
+                    if (self.sessionTokens.fetchRemove(cookie.str)) |maybe_session| {
+                        const sessionid = maybe_session.value;
+                        std.debug.print("logout removing session id {s}\n", .{sessionid});
+                        _ = self.sessions.delete(sessionid);
+                    }
                 }
             } else |err| {
                 std.debug.print("unreachable: SessionAuth.logout: {any}", .{err});
@@ -154,111 +186,93 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                     // this is not an error in case of e.g. gets with querystrings
                 };
 
-                var login = eql(u8, p, s.signin_callback);
-                var register = eql(u8, p, s.signup_callback);
-                if (login or register) {
-                    std.debug.print("in internal.authenticateRequest: login:{} or register:{}\n", .{ login, register });
-                    // get params of subject and password
-                    if (r.getParamStr(self.settings.subject_param, self.allocator, false)) |maybe_subject| {
-                        if (maybe_subject) |*subject| {
-                            defer subject.deinit();
-                            std.debug.print("in internal.authenticateRequest: sub:{s}\n", .{subject.str});
-                            if (r.getParamStr(self.settings.password_param, self.allocator, false)) |maybe_password| {
-                                if (maybe_password) |*password| {
-                                    defer password.deinit();
-                                    std.debug.print("in internal.authenticateRequest: password:{s}\n", .{password.str});
-                                    if (register) {
-                                        if (r.getParamStr(self.settings.name_param, self.allocator, false)) |maybe_name| {
-                                            if (maybe_name) |*name| {
-                                                defer name.deinit();
-                                                std.debug.print("in internal.authenticateRequest: name:{s}\n", .{name.str});
+                if (r.method) |method| {
+                    var isLogin = eql(u8, p, s.signin_callback);
+                    var isRegister = eql(u8, p, s.signup_callback);
+                    if (std.mem.eql(u8, method, "POST") and (isLogin or isRegister)) {
+                        std.debug.print("in internal.authenticateRequest: login:{} or register:{}\n", .{ isLogin, isRegister });
+                        // get params of subject and password
+                        if (r.getParamStr(self.settings.subject_param, self.allocator, false)) |maybe_subject| {
+                            if (maybe_subject) |*subject| {
+                                defer subject.deinit();
+                                std.debug.print("in internal.authenticateRequest: sub:{s}\n", .{subject.str});
+                                if (r.getParamStr(self.settings.password_param, self.allocator, false)) |maybe_password| {
+                                    if (maybe_password) |*password| {
+                                        defer password.deinit();
+                                        std.debug.print("in internal.authenticateRequest: password:{s}\n", .{password.str});
+                                        if (isRegister) {
+                                            if (r.getParamStr(self.settings.name_param, self.allocator, false)) |maybe_name| {
+                                                if (maybe_name) |*name| {
+                                                    defer name.deinit();
+                                                    std.debug.print("in internal.authenticateRequest: name:{s}\n", .{name.str});
 
-                                                if (self.users.getBySub(subject.str)) |user| {
-                                                    std.debug.print("{s} already exists, login instead\n", .{user.email});
-                                                    // user exists already, log the user in
-                                                    login = true;
-                                                } else {
-                                                    _ = self.users.add(name.str, subject.str, password.str) catch |err| {
-                                                        std.debug.print("cannot add {s}: {}\n", .{ subject.str, err });
-                                                        return .AuthFailed;
-                                                    };
-                                                    login = true;
-                                                }
-                                            }
-                                        } else |err| {
-                                            std.debug.print("getParamStr() for name failed in SessionAuth: {}\n", .{err});
-                                            return .AuthFailed;
-                                        }
-                                    }
-                                    std.debug.print("in internal.authenticateRequest: login:{}\n", .{login});
-                                    if (login) {
-                                        // now check
-                                        std.debug.print("in internal.authenticateRequest: login for {s}\n", .{subject.str});
-                                        if (self.users.getBySub(subject.str)) |user| {
-                                            std.debug.print("in internal.authenticateRequest: checking password {s}\n", .{password.str});
-                                            if (user.checkPassword(subject.str, password.str)) {
-                                                // create session token
-                                                std.debug.print("password matches for {s} {s}\n", .{ user.email, user.id });
-
-                                                if (self.createAndStoreSessionToken(subject.str, user.id)) |token| {
-                                                    std.debug.print("token created {s}\n", .{token});
-                                                    // now set the cookie header
-                                                    if (r.setCookie(.{
-                                                        .name = self.settings.cookie_name,
-                                                        .value = token,
-                                                        .max_age_s = self.settings.cookie_maxage,
-                                                    })) {
-                                                        return .Handled;
-                                                    } else |err| {
-                                                        std.debug.print("could not set session token: {any}\n", .{err});
+                                                    if (self.users.getBySub(subject.str)) |user| {
+                                                        std.debug.print("{s} already exists, login instead\n", .{user.email});
+                                                        // user exists already, log the user in
+                                                        isLogin = true;
+                                                    } else {
+                                                        _ = self.users.add(name.str, subject.str, password.str) catch |err| {
+                                                            std.debug.print("cannot add {s}: {}\n", .{ subject.str, err });
+                                                            return .AuthFailed;
+                                                        };
+                                                        isLogin = true;
                                                     }
-                                                } else |err| {
-                                                    std.debug.print("could not create session token: {any}\n", .{err});
                                                 }
-                                                // errors with token don't mean the auth itself wasn't OK
-                                                return .Handled;
-                                            } else {
-                                                std.debug.print("password didn't match in SessionAuth\n", .{});
+                                            } else |err| {
+                                                std.debug.print("getParamStr() for name failed in SessionAuth: {}\n", .{err});
                                                 return .AuthFailed;
                                             }
                                         }
+                                        std.debug.print("in internal.authenticateRequest: login:{}\n", .{isLogin});
+                                        if (isLogin) {
+                                            // now check
+                                            std.debug.print("in internal.authenticateRequest: login for {s}\n", .{subject.str});
+                                            if (self.users.getBySub(subject.str)) |user| {
+                                                std.debug.print("in internal.authenticateRequest: checking password {s}\n", .{password.str});
+                                                if (user.checkPassword(subject.str, password.str)) {
+                                                    // create session token
+                                                    std.debug.print("password matches for {s} {s}\n", .{ user.email, user.id });
+
+                                                    if (self.createAndStoreSessionToken(subject.str, user.id)) |token| {
+                                                        // now set the cookie header
+                                                        if (r.setCookie(.{
+                                                            .name = self.settings.cookie_name,
+                                                            .value = token,
+                                                            .max_age_s = self.settings.cookie_maxage,
+                                                        })) {
+                                                            return .Handled;
+                                                        } else |err| {
+                                                            std.debug.print("could not set session token: {any}\n", .{err});
+                                                        }
+                                                    } else |err| {
+                                                        std.debug.print("could not create session token: {any}\n", .{err});
+                                                    }
+                                                    // errors with token don't mean the auth itself wasn't OK
+                                                    return .Handled;
+                                                } else {
+                                                    std.debug.print("password didn't match in SessionAuth\n", .{});
+                                                    return .AuthFailed;
+                                                }
+                                            }
+                                        }
                                     }
+                                } else |err| {
+                                    std.debug.print("getParamStr() for password failed in SessionAuth: {any}", .{err});
+                                    return .AuthFailed;
                                 }
-                            } else |err| {
-                                std.debug.print("getParamStr() for password failed in SessionAuth: {any}", .{err});
-                                return .AuthFailed;
                             }
+                        } else |err| {
+                            std.debug.print("getParamStr() for user failed in SessionAuth: {any}", .{err});
+                            return .AuthFailed;
                         }
-                    } else |err| {
-                        std.debug.print("getParamStr() for user failed in SessionAuth: {any}", .{err});
-                        return .AuthFailed;
+                    } else if (std.mem.eql(u8, method, "DELETE") and isLogin) {
+                        self.logout(r);
                     }
                 }
 
                 std.debug.print("in internal.authenticateRequest: going for auth\n", .{});
 
-                r.parseCookies(false);
-
-                // check for session cookie
-                if (r.getCookieStr(self.settings.cookie_name, self.allocator, false)) |maybe_cookie| {
-                    if (maybe_cookie) |cookie| {
-                        defer cookie.deinit();
-                        // locked or unlocked token lookup
-                        std.debug.print("in internal.authenticateRequest: cookie {s}\n", .{cookie.str});
-                        std.debug.print("in internal.authenticateRequest: sessions has {d} tokens\n", .{self.sessionTokens.count()});
-                        if (self.sessionTokens.contains(cookie.str)) {
-                            // cookie is a valid session!
-                            std.debug.print("Auth: COOKIE IS OK!!!!: {s}\n", .{cookie.str});
-                            return .AuthOK;
-                        } else {
-                            std.debug.print("Auth: COOKIE IS BAD!!!!: {s}\n", .{cookie.str});
-                        }
-                    } else {
-                        std.debug.print("in internal.authenticateRequest: no {s} cookie found\n", .{self.settings.cookie_name});
-                    }
-                } else |err| {
-                    std.debug.print("unreachable: could not check for cookie in SessionAuth: {any}", .{err});
-                }
+                return self.login(r);
             }
 
             return .AuthFailed;
