@@ -21,7 +21,6 @@ pub fn init(
         .endpoint = zap.SimpleEndpoint.init(.{
             .path = user_path,
             .get = getUser,
-            .put = updateUser,
             .patch = updateUser,
             .delete = deleteUser,
         }),

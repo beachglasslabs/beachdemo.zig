@@ -57,7 +57,7 @@ pub fn main() !void {
     var user_endpoint = UserEndpoint.init(allocator, "/users");
     defer user_endpoint.deinit();
 
-    var session_endpoint = SessionEndpoint.init(allocator, "/sessions", &user_endpoint.users);
+    var session_endpoint = SessionEndpoint.init(allocator, "/sessions");
     defer session_endpoint.deinit();
 
     // create authenticator

@@ -11,17 +11,14 @@ pub const Self = @This();
 alloc: std.mem.Allocator = undefined,
 endpoint: zap.SimpleEndpoint = undefined,
 sessions: Sessions = undefined,
-users: *Users = undefined,
 
 pub fn init(
     a: std.mem.Allocator,
     session_path: []const u8,
-    u: *Users,
 ) Self {
     return .{
         .alloc = a,
         .sessions = Sessions.init(a),
-        .users = u,
         .endpoint = zap.SimpleEndpoint.init(.{
             .path = session_path,
             .get = getSession,

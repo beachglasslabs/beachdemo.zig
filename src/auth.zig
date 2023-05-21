@@ -178,15 +178,10 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                                                     // user exists already, log the user in
                                                     login = true;
                                                 } else {
-                                                    const id = self.users.add(name.str, subject.str, password.str) catch |err| {
+                                                    _ = self.users.add(name.str, subject.str, password.str) catch |err| {
                                                         std.debug.print("cannot add {s}: {}\n", .{ subject.str, err });
                                                         return .AuthFailed;
                                                     };
-                                                    if (self.users.getBySub(subject.str)) |user| {
-                                                        std.debug.print("{s} added as user {s}\n", .{ user.email, user.id });
-                                                    } else {
-                                                        std.debug.print("{s} cannot be found {s}\n", .{ subject.str, id });
-                                                    }
                                                     login = true;
                                                 }
                                             }
@@ -205,7 +200,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                                                 // create session token
                                                 std.debug.print("password matches for {s} {s}\n", .{ user.email, user.id });
 
-                                                if (self.createAndStoreSessionToken(subject.str, password.str)) |token| {
+                                                if (self.createAndStoreSessionToken(subject.str, user.id)) |token| {
                                                     std.debug.print("token created {s}\n", .{token});
                                                     // now set the cookie header
                                                     if (r.setCookie(.{
@@ -306,10 +301,10 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
             try r.redirectTo(self.settings.signin_url, self.settings.redirect_code);
         }
 
-        fn createSessionToken(self: *Self, subject: []const u8, password: []const u8) ![]const u8 {
+        fn createSessionToken(self: *Self, subject: []const u8, sessionid: []const u8) ![]const u8 {
             var hasher = Hash.init(.{});
             hasher.update(subject);
-            hasher.update(password);
+            hasher.update(sessionid);
             var digest: [Hash.digest_length]u8 = undefined;
             hasher.final(&digest);
             const token: Token = std.fmt.bytesToHex(digest, .lower);
@@ -317,13 +312,14 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
             return token_str;
         }
 
-        fn createAndStoreSessionToken(self: *Self, subject: []const u8, password: []const u8) ![]const u8 {
-            const token = try self.createSessionToken(subject, password);
+        fn createAndStoreSessionToken(self: *Self, subject: []const u8, userid: []const u8) ![]const u8 {
+            const sessionid = try self.sessions.create(userid);
+            const token = try self.createSessionToken(subject, sessionid);
             // put locked or not
             std.debug.print("create token={s}\n", .{token});
             if (!self.sessionTokens.contains(token)) {
                 std.debug.print("putting token={s}\n", .{token});
-                try self.sessionTokens.put(token, token);
+                try self.sessionTokens.put(token, sessionid);
             }
             return token;
         }

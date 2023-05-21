@@ -1,44 +1,46 @@
 const std = @import("std");
-const Users = @import("users.zig");
-const User = Users.User;
 const uuid = @import("uuid.zig");
 
-alloc: std.mem.Allocator = undefined,
+allocator: std.mem.Allocator = undefined,
 sessions: std.StringHashMap(Session) = undefined,
 lock: std.Thread.Mutex = undefined,
 
 pub const Self = @This();
 
 pub const Session = struct {
-    id: [36]u8 = undefined,
-    user: *const User = undefined,
+    id: []const u8 = undefined,
+    userid: []const u8 = undefined,
 };
 
 pub fn init(a: std.mem.Allocator) Self {
     return .{
-        .alloc = a,
+        .allocator = a,
         .sessions = std.StringHashMap(Session).init(a),
         .lock = std.Thread.Mutex{},
     };
 }
 
 pub fn deinit(self: *Self) void {
+    var iter = self.sessions.valueIterator();
+    while (iter.next()) |session| {
+        defer self.allocator.free(session.id);
+    }
     self.sessions.deinit();
 }
 
 // the request will be freed (and its mem reused by facilio) when it's
 // completed, so we take copies of the names
-pub fn login(self: *Self, user: *const User) ![]const u8 {
+pub fn create(self: *Self, userid: []const u8) ![]const u8 {
     var session: Session = undefined;
 
-    session.user = user;
+    session.userid = userid;
 
     // We lock only on insertion, deletion, and listing
     self.lock.lock();
     defer self.lock.unlock();
-    _ = try std.fmt.bufPrint(&session.id, "{s}", .{uuid.newV4()});
-    if (self.sessions.put(&session.id, session)) {
-        return &session.id;
+    session.id = try std.fmt.allocPrint(self.allocator, "{s}", .{uuid.newV4()});
+    if (self.sessions.put(session.id, session)) {
+        return session.id;
     } else |err| {
         std.debug.print("create error: {}\n", .{err});
         // make sure we pass on the error
@@ -51,19 +53,19 @@ pub fn delete(self: *Self, id: []const u8) bool {
     self.lock.lock();
     defer self.lock.unlock();
 
-    return self.sessions.remove(id);
+    if (self.sessions.fetchRemove(id)) |maybe_session| {
+        const session = maybe_session.value;
+        defer self.allocator.free(session.id);
+        return true;
+    } else {
+        return false;
+    }
 }
 
 pub fn get(self: *Self, id: []const u8) ?Session {
     // we don't care about locking here, as our usage-pattern is unlikely to
     // get a session by id that is not known yet
-    if (self.sessions.getPtr(id)) |pSession| {
-        return .{
-            .id = pSession.id,
-            .user = pSession.user,
-        };
-    }
-    return null;
+    return self.sessions.get(id);
 }
 
 pub fn toJSON(self: *Self) ![]const u8 {
@@ -72,10 +74,8 @@ pub fn toJSON(self: *Self) ![]const u8 {
 
     // We create a Session list that's JSON-friendly
     // NOTE: we could also implement the whole JSON writing ourselves here,
-    // working directly with InternalSession elements of the sessions hashmap.
-    // might actually save some memory
     // TODO: maybe do it directly with the session.items
-    var l: std.ArrayList(Session) = std.ArrayList(Session).init(self.alloc);
+    var l: std.ArrayList(Session) = std.ArrayList(Session).init(self.allocator);
     defer l.deinit();
 
     // the potential race condition is fixed by jsonifying with the mutex locked
@@ -84,7 +84,7 @@ pub fn toJSON(self: *Self) ![]const u8 {
         try l.append(session);
     }
     std.debug.assert(self.sessions.count() == l.items.len);
-    return std.json.stringifyAlloc(self.alloc, l.items, .{});
+    return std.json.stringifyAlloc(self.allocator, l.items, .{});
 }
 
 //
@@ -141,7 +141,7 @@ const JsonSessionIteratorWithRaceCondition = struct {
             var session: Session = .{
                 // we don't need .* syntax but want to make it obvious
                 .id = pSession.*.id,
-                .user = pSession.*.user,
+                .userid = pSession.*.userid,
             };
             return session;
         }
