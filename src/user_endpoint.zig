@@ -82,22 +82,7 @@ fn updateUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     if (r.path) |path| {
         if (self.userIdFromPath(path)) |id| {
             if (self.users.getById(id)) |_| {
-                if (r.body) |body| {
-                    var maybe_user: ?User = std.json.parseFromSlice(User, self.alloc, body, .{}) catch null;
-                    if (maybe_user) |u| {
-                        defer std.json.parseFree(User, self.alloc, u);
-                        var jsonbuf: [128]u8 = undefined;
-                        if (self.users.update(id, u.name, u.email, u.password)) {
-                            if (zap.stringifyBuf(&jsonbuf, .{ .status = "OK", .id = id }, .{})) |json| {
-                                r.sendJson(json) catch return;
-                            }
-                        } else {
-                            if (zap.stringifyBuf(&jsonbuf, .{ .status = "ERROR", .id = id }, .{})) |json| {
-                                r.sendJson(json) catch return;
-                            }
-                        }
-                    }
-                }
+                if (r.body) |_| {}
             }
         }
     }

@@ -1,12 +1,14 @@
 const std = @import("std");
 const uuid = @import("uuid.zig");
 
-alloc: std.mem.Allocator = undefined,
+allocator: std.mem.Allocator = undefined,
 users_by_id: std.StringHashMap(InternalUser) = undefined,
 users_by_email: std.StringHashMap(User) = undefined,
 lock: std.Thread.Mutex = undefined,
 
 pub const Self = @This();
+
+const Hash = std.crypto.hash.sha2.Sha256;
 
 const InternalUser = struct {
     id: []const u8 = undefined,
@@ -14,30 +16,39 @@ const InternalUser = struct {
     namelen: usize = undefined,
     mailbuf: [64]u8 = undefined,
     maillen: usize = undefined,
-    passbuf: [64]u8 = undefined,
-    passlen: usize = undefined,
+    hashbuf: [Hash.digest_length * 2]u8 = undefined,
 };
 
 pub const User = struct {
     id: []const u8,
     name: []const u8,
     email: []const u8,
-    password: []const u8,
+    hash: []const u8,
 
-    pub fn checkPassword(self: *const User, password: []const u8) bool {
-        std.debug.print("checking user.password:{s} with password:{s}\n", .{ self.password, password });
-        if (std.mem.eql(u8, self.password, password)) {
-            std.debug.print("password is same\n", .{});
-            return true;
-        }
-
-        return false;
+    pub fn checkPassword(self: *const User, subject: []const u8, password: []const u8) bool {
+        var hasher = Hash.init(.{});
+        hasher.update(subject);
+        hasher.update(password);
+        var digest: [Hash.digest_length]u8 = undefined;
+        hasher.final(&digest);
+        const hash = std.fmt.bytesToHex(digest, .lower);
+        return std.mem.eql(u8, self.hash, &hash);
     }
 };
 
+pub fn hashPassword(buf: []u8, subject: []const u8, password: []const u8) !void {
+    var hasher = Hash.init(.{});
+    hasher.update(subject);
+    hasher.update(password);
+    var digest: [Hash.digest_length]u8 = undefined;
+    hasher.final(&digest);
+    const hash = std.fmt.bytesToHex(digest, .lower);
+    std.mem.copy(u8, buf, &hash);
+}
+
 pub fn init(a: std.mem.Allocator) Self {
     return .{
-        .alloc = a,
+        .allocator = a,
         .users_by_id = std.StringHashMap(InternalUser).init(a),
         .users_by_email = std.StringHashMap(User).init(a),
         .lock = std.Thread.Mutex{},
@@ -48,7 +59,7 @@ pub fn deinit(self: *Self) void {
     self.users_by_email.deinit();
     var iter = self.users_by_id.valueIterator();
     while (iter.next()) |user| {
-        defer self.alloc.free(user.id);
+        defer self.allocator.free(user.id);
     }
     self.users_by_id.deinit();
 }
@@ -59,8 +70,8 @@ pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8)
     var user: InternalUser = undefined;
     user.namelen = 0;
     user.maillen = 0;
-    user.passlen = 0;
 
+    // TODO return error when field is empty
     if (name) |username| {
         std.mem.copy(u8, user.namebuf[0..], username);
         user.namelen = username.len;
@@ -69,17 +80,16 @@ pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8)
     if (mail) |usermail| {
         std.mem.copy(u8, user.mailbuf[0..], usermail);
         user.maillen = usermail.len;
-    }
 
-    if (pass) |userpass| {
-        std.mem.copy(u8, user.passbuf[0..], userpass);
-        user.passlen = userpass.len;
+        if (pass) |userpass| {
+            try hashPassword(&user.hashbuf, usermail, userpass);
+        }
     }
 
     // We lock only on insertion, deletion, and listing
     self.lock.lock();
     defer self.lock.unlock();
-    user.id = try std.fmt.allocPrint(self.alloc, "{s}", .{uuid.newV4()});
+    user.id = try std.fmt.allocPrint(self.allocator, "{s}", .{uuid.newV4()});
     if (self.users_by_id.put(user.id, user)) {
         var newUser = self.getById(user.id).?;
         std.debug.print("adding user: {s} as {s}\n", .{ newUser.email, newUser.id });
@@ -104,7 +114,7 @@ pub fn delete(self: *Self, id: []const u8) bool {
     defer self.lock.unlock();
 
     const user = self.users_by_id.fetchRemove(id).?.value;
-    defer self.alloc.free(user.id);
+    defer self.allocator.free(user.id);
     return self.users_by_email.remove(&user.mailbuf);
 }
 
@@ -123,10 +133,10 @@ pub fn getById(self: *Self, id: []const u8) ?User {
     if (self.users_by_id.getPtr(id)) |pUser| {
         std.debug.print("getById found {s}\n", .{pUser.id});
         return .{
-            .id = pUser.id[0..36],
+            .id = pUser.id,
             .name = pUser.namebuf[0..pUser.namelen],
             .email = pUser.mailbuf[0..pUser.maillen],
-            .password = pUser.passbuf[0..pUser.passlen],
+            .hash = &pUser.hashbuf,
         };
     } else {
         std.debug.print("getById cannot find {s}\n", .{id});
@@ -151,10 +161,9 @@ pub fn update(
         if (mail) |usermail| {
             std.mem.copy(u8, pUser.mailbuf[0..], usermail);
             pUser.maillen = usermail.len;
-        }
-        if (pass) |userpass| {
-            std.mem.copy(u8, pUser.passbuf[0..], userpass);
-            pUser.passlen = userpass.len;
+            if (pass) |userpass| {
+                hashPassword(&pUser.hashbuf, usermail, userpass) catch return false;
+            }
         }
     }
     return false;
@@ -169,7 +178,7 @@ pub fn toJSON(self: *Self) ![]const u8 {
     // working directly with InternalUser elements of the users hashmap.
     // might actually save some memory
     // TODO: maybe do it directly with the user.items
-    var l: std.ArrayList(User) = std.ArrayList(User).init(self.alloc);
+    var l: std.ArrayList(User) = std.ArrayList(User).init(self.allocator);
     defer l.deinit();
 
     // the potential race condition is fixed by jsonifying with the mutex locked
@@ -179,7 +188,7 @@ pub fn toJSON(self: *Self) ![]const u8 {
     }
     std.debug.assert(self.users_by_id.count() == l.items.len);
     std.debug.assert(self.users_by_email.count() == l.items.len);
-    return std.json.stringifyAlloc(self.alloc, l.items, .{});
+    return std.json.stringifyAlloc(self.allocator, l.items, .{});
 }
 
 //
@@ -235,19 +244,16 @@ const JsonUserIteratorWithRaceCondition = struct {
             // SEE ABOVE NOTE regarding race condition why this is can be problematic
             var user: User = .{
                 // we don't need .* syntax but want to make it obvious
-                .id = pUser.*.id[0..36],
+                .id = pUser.*.id,
                 .name = pUser.*.namebuf[0..pUser.*.namelen],
                 .email = pUser.*.mailbuf[0..pUser.*.maillen],
-                .password = pUser.*.passbuf[0..pUser.*.passlen],
+                .hash = &pUser.*.hashbuf,
             };
             if (pUser.*.namelen == 0) {
                 user.name = "";
             }
             if (pUser.*.maillen == 0) {
                 user.email = "";
-            }
-            if (pUser.*.passlen == 0) {
-                user.password = "";
             }
             return user;
         }

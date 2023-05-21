@@ -64,7 +64,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
         sessionTokens: SessionTokenMap,
 
         const Self = @This();
-        const SessionTokenMap = std.StringHashMap(void);
+        const SessionTokenMap = std.StringHashMap([]const u8);
         const Hash = std.crypto.hash.sha2.Sha256;
 
         const Token = [Hash.digest_length * 2]u8;
@@ -201,7 +201,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
                                         std.debug.print("in internal.authenticateRequest: login for {s}\n", .{subject.str});
                                         if (self.users.getBySub(subject.str)) |user| {
                                             std.debug.print("in internal.authenticateRequest: checking password {s}\n", .{password.str});
-                                            if (user.checkPassword(password.str)) {
+                                            if (user.checkPassword(subject.str, password.str)) {
                                                 // create session token
                                                 std.debug.print("password matches for {s} {s}\n", .{ user.email, user.id });
 
@@ -323,7 +323,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type) ty
             std.debug.print("create token={s}\n", .{token});
             if (!self.sessionTokens.contains(token)) {
                 std.debug.print("putting token={s}\n", .{token});
-                try self.sessionTokens.put(token, {});
+                try self.sessionTokens.put(token, token);
             }
             return token;
         }
