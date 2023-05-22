@@ -15,11 +15,11 @@ fn auth(router: *Router.Router(User), r: zap.SimpleRequest, _: ?*User) void {
 }
 
 fn index(router: *Router.Router(User), r: zap.SimpleRequest, _: ?*User) void {
-    router.renderTemplate(r, "web/templates/index.html", .{ .name = "hello", .avatar = "/img/default-red.png" }) catch return;
+    router.renderTemplate(r, "web/templates/index.html", .{ .name = "hello", .avatar = Users.newAvatarImage() }) catch return;
 }
 
 fn profiles(router: *Router.Router(User), r: zap.SimpleRequest, _: ?*User) void {
-    router.renderTemplate(r, "web/templates/profiles.html", .{ .name = "hello", .avatar = "/img/default-blue.png" }) catch return;
+    router.renderTemplate(r, "web/templates/profiles.html", .{ .name = "hello", .avatar = Users.newAvatarImage() }) catch return;
 }
 
 fn redirect(r: zap.SimpleRequest) void {

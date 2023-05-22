@@ -10,6 +10,8 @@ pub const Self = @This();
 
 const Hash = std.crypto.hash.sha2.Sha256;
 
+const avatar_images = [_][]const u8{ "/img/default-blue.png", "/img/default-red.png", "/img/default-slate.png", "/img/default-green.png" };
+
 const InternalUser = struct {
     id: []const u8 = undefined,
     namebuf: [64]u8 = undefined,
@@ -17,6 +19,7 @@ const InternalUser = struct {
     mailbuf: [64]u8 = undefined,
     maillen: usize = undefined,
     hashbuf: [Hash.digest_length * 2]u8 = undefined,
+    avatar: []const u8 = undefined,
 };
 
 pub const User = struct {
@@ -24,6 +27,7 @@ pub const User = struct {
     name: []const u8,
     email: []const u8,
     hash: []const u8,
+    avatar: []const u8,
 
     pub fn checkPassword(self: *const User, subject: []const u8, password: []const u8) bool {
         var hasher = Hash.init(.{});
@@ -35,6 +39,14 @@ pub const User = struct {
         return std.mem.eql(u8, self.hash, &hash);
     }
 };
+
+pub fn newAvatarImage() []const u8 {
+    var rng = std.rand.DefaultPrng.init(@intCast(u64, std.time.timestamp()));
+    const random = rng.random();
+
+    const i = random.uintLessThan(u8, 4);
+    return avatar_images[i];
+}
 
 pub fn hashPassword(buf: []u8, subject: []const u8, password: []const u8) !void {
     var hasher = Hash.init(.{});
@@ -90,6 +102,7 @@ pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8)
     self.lock.lock();
     defer self.lock.unlock();
     user.id = try std.fmt.allocPrint(self.allocator, "{s}", .{uuid.newV4()});
+    user.avatar = newAvatarImage();
     if (self.users_by_id.put(user.id, user)) {
         var newUser = self.getById(user.id).?;
         std.debug.print("adding user: {s} as {s}\n", .{ newUser.email, newUser.id });
@@ -137,6 +150,7 @@ pub fn getById(self: *Self, id: []const u8) ?User {
             .name = pUser.namebuf[0..pUser.namelen],
             .email = pUser.mailbuf[0..pUser.maillen],
             .hash = &pUser.hashbuf,
+            .avatar = pUser.avatar,
         };
     } else {
         std.debug.print("getById cannot find {s}\n", .{id});
@@ -248,6 +262,7 @@ const JsonUserIteratorWithRaceCondition = struct {
                 .name = pUser.*.namebuf[0..pUser.*.namelen],
                 .email = pUser.*.mailbuf[0..pUser.*.maillen],
                 .hash = &pUser.*.hashbuf,
+                .avatar = pUser.*.avatar,
             };
             if (pUser.*.namelen == 0) {
                 user.name = "";
