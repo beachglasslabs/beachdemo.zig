@@ -62,6 +62,9 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type, comptime 
             switch (self.authenticator.authenticateRequest(&r)) {
                 .AuthOK => {
                     std.debug.print("middleware: authenticated\n", .{});
+                    if (r.isFinished()) {
+                        return;
+                    }
                     if (r.path) |p| {
                         for (self.endpoints.items) |ep| {
                             if (std.mem.startsWith(u8, p, ep.settings.path)) {
@@ -77,6 +80,9 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type, comptime 
                 },
                 .Handled => {
                     std.debug.print("middleware: handled\n", .{});
+                    if (r.isFinished()) {
+                        return;
+                    }
                     if (r.path) |p| {
                         std.debug.print("middleware.handled: dispatch to router {s}\n", .{p});
                         self.router.dispatch(r, null);

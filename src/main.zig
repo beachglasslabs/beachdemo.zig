@@ -2,6 +2,7 @@ const std = @import("std");
 const zap = @import("zap");
 const UserEndpoint = @import("user_endpoint.zig");
 const SessionEndpoint = @import("session_endpoint.zig");
+const MovieEndpoint = @import("movie_endpoint.zig");
 const Router = @import("router.zig");
 const Middleware = @import("middleware.zig");
 const UserSession = @import("auth.zig");
@@ -11,7 +12,7 @@ const User = Users.User;
 const Session = Sessions.Session;
 
 fn auth(router: *Router.Router(User), r: zap.SimpleRequest, _: ?User) void {
-    std.debug.print("rendering auth\n", .{});
+    std.debug.print("rendering authl\n", .{});
     router.renderTemplate(r, "web/templates/auth.html", .{}) catch return;
 }
 
@@ -71,6 +72,9 @@ pub fn main() !void {
     var session_endpoint = SessionEndpoint.init(allocator, "/sessions");
     defer session_endpoint.deinit();
 
+    var movie_endpoint = try MovieEndpoint.init(allocator, "/movies", "web/movies.json");
+    defer movie_endpoint.deinit();
+
     // create authenticator
     const Authenticator = UserSession.SessionAuth(Users, Sessions, User);
     const auth_args = UserSession.SessionAuthArgs{
@@ -94,6 +98,7 @@ pub fn main() !void {
     var dispatcher = Dispatcher.init(allocator, &router, &authenticator);
     try dispatcher.addEndpoint(user_endpoint.getEndpoint());
     try dispatcher.addEndpoint(session_endpoint.getEndpoint());
+    try dispatcher.addEndpoint(movie_endpoint.getEndpoint());
 
     // add endpoints
     try listener.addEndpoint(dispatcher.getEndpoint());

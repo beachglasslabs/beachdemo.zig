@@ -101,6 +101,7 @@ pub fn Router(comptime ContextType: anytype) type {
             const size = (try file.stat()).size;
 
             const template = try file.reader().readAllAlloc(self.allocator, size);
+            defer self.allocator.free(template);
 
             const p = try zap.MustacheNew(template);
             defer zap.MustacheFree(p);
