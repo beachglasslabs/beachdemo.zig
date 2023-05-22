@@ -10,16 +10,26 @@ const Sessions = @import("sessions.zig");
 const User = Users.User;
 const Session = Sessions.Session;
 
-fn auth(router: *Router.Router(User), r: zap.SimpleRequest, _: ?*User) void {
+fn auth(router: *Router.Router(User), r: zap.SimpleRequest, _: ?User) void {
     router.renderTemplate(r, "web/templates/auth.html", .{}) catch return;
 }
 
-fn index(router: *Router.Router(User), r: zap.SimpleRequest, _: ?*User) void {
-    router.renderTemplate(r, "web/templates/index.html", .{ .name = "hello", .avatar = Users.newAvatarImage() }) catch return;
+fn index(router: *Router.Router(User), r: zap.SimpleRequest, maybe_user: ?User) void {
+    if (maybe_user) |user| {
+        std.debug.print("index: user is {s}\n", .{user.name});
+        router.renderTemplate(r, "web/templates/index.html", .{ .name = user.name, .avatar = user.avatar }) catch return;
+    } else {
+        std.debug.print("index: user is null\n", .{});
+    }
 }
 
-fn profiles(router: *Router.Router(User), r: zap.SimpleRequest, _: ?*User) void {
-    router.renderTemplate(r, "web/templates/profiles.html", .{ .name = "hello", .avatar = Users.newAvatarImage() }) catch return;
+fn profiles(router: *Router.Router(User), r: zap.SimpleRequest, maybe_user: ?User) void {
+    if (maybe_user) |user| {
+        std.debug.print("profiles: user is {s}\n", .{user.name});
+        router.renderTemplate(r, "web/templates/profiles.html", .{ .name = user.name, .avatar = user.avatar }) catch return;
+    } else {
+        std.debug.print("profiles: user is null\n", .{});
+    }
 }
 
 fn redirect(r: zap.SimpleRequest) void {
@@ -33,7 +43,7 @@ pub fn main() !void {
     var allocator = gpa.allocator();
 
     // setup routes
-    var router = try Router.Router(User).init(allocator, "/auth");
+    var router = try Router.Router(User).init(allocator);
     defer router.deinit();
 
     try router.get("/", index);
@@ -61,7 +71,7 @@ pub fn main() !void {
     defer session_endpoint.deinit();
 
     // create authenticator
-    const Authenticator = UserSession.SessionAuth(Users, Sessions);
+    const Authenticator = UserSession.SessionAuth(Users, Sessions, User);
     const auth_args = UserSession.SessionAuthArgs{
         .name_param = "name",
         .subject_param = "email",
@@ -79,13 +89,13 @@ pub fn main() !void {
     defer authenticator.deinit();
 
     // create authenticating endpoint
-    const AuthMiddleware = Middleware.Middleware(Router.Router(User), Authenticator, zap.AuthResult);
-    var auth_wrapper = AuthMiddleware.init(allocator, &router, &authenticator);
-    try auth_wrapper.addEndpoint(user_endpoint.getEndpoint());
-    try auth_wrapper.addEndpoint(session_endpoint.getEndpoint());
+    const Dispatcher = Middleware.Middleware(Router.Router(User), Authenticator, zap.AuthResult);
+    var dispatcher = Dispatcher.init(allocator, &router, &authenticator);
+    try dispatcher.addEndpoint(user_endpoint.getEndpoint());
+    try dispatcher.addEndpoint(session_endpoint.getEndpoint());
 
     // add endpoints
-    try listener.addEndpoint(auth_wrapper.getEndpoint());
+    try listener.addEndpoint(dispatcher.getEndpoint());
 
     // listen
     try listener.listen();
@@ -94,7 +104,7 @@ pub fn main() !void {
 
     // start worker threads
     zap.start(.{
-        .threads = 100,
+        .threads = 1,
         // IMPORTANT! It is crucial to only have a single worker for this example to work!
         // Multiple workers would have multiple copies of the users hashmap.
         //

@@ -59,20 +59,32 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type, comptime 
         }
 
         fn _internal_handleRequest(self: *Self, r: zap.SimpleRequest, handler: ?RequestFn) void {
-            if (self.authenticator.authenticateRequest(&r) == .AuthOK) {
-                std.debug.print("middleware: authenticated\n", .{});
-                if (r.path) |p| {
-                    std.debug.print("middleware: internal handler for {s}\n", .{p});
-                    for (self.endpoints.items) |ep| {
-                        if (std.mem.startsWith(u8, p, ep.settings.path)) {
-                            std.debug.print("middleware: dispatch to endpoint {s}\n", .{ep.settings.path});
-                            handler.?(ep, r);
-                            return;
+            switch (self.authenticator.authenticateRequest(&r)) {
+                .AuthOK => {
+                    std.debug.print("middleware: authenticated\n", .{});
+                    if (r.path) |p| {
+                        for (self.endpoints.items) |ep| {
+                            if (std.mem.startsWith(u8, p, ep.settings.path)) {
+                                std.debug.print("middleware.auth: dispatch to endpoint {s}\n", .{ep.settings.path});
+                                handler.?(ep, r);
+                                return;
+                            }
                         }
+                        std.debug.print("middleware.auth: dispatch to router {s}\n", .{p});
+                        var c = self.authenticator.getContext(&r);
+                        self.router.dispatch(r, c);
                     }
-                    std.debug.print("middleware: dispatch to router {s}\n", .{p});
-                    return self.router.dispatch(r, null);
-                }
+                },
+                .Handled => {
+                    std.debug.print("middleware: handled\n", .{});
+                    if (r.path) |p| {
+                        std.debug.print("middleware.handled: dispatch to router {s}\n", .{p});
+                        self.router.dispatch(r, null);
+                    }
+                },
+                else => {
+                    std.debug.print("middleware.failed\n", .{});
+                },
             }
         }
 

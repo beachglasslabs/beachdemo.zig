@@ -4,20 +4,18 @@ const zap = @import("zap");
 pub fn Router(comptime ContextType: anytype) type {
     return struct {
         allocator: std.mem.Allocator = undefined,
-        redirect_url: []const u8 = undefined,
         gets: std.StringHashMap(RequestFn) = undefined,
         puts: std.StringHashMap(RequestFn) = undefined,
         posts: std.StringHashMap(RequestFn) = undefined,
         deletes: std.StringHashMap(RequestFn) = undefined,
         patches: std.StringHashMap(RequestFn) = undefined,
 
-        pub const RequestFn = *const fn (*Self, zap.SimpleRequest, ?*ContextType) void;
+        pub const RequestFn = *const fn (*Self, zap.SimpleRequest, ?ContextType) void;
         const Self = @This();
 
-        pub fn init(allocator: std.mem.Allocator, redirect_url: []const u8) !Self {
+        pub fn init(allocator: std.mem.Allocator) !Self {
             return .{
                 .allocator = allocator,
-                .redirect_url = try allocator.dupe(u8, redirect_url),
                 .gets = std.StringHashMap(RequestFn).init(allocator),
                 .posts = std.StringHashMap(RequestFn).init(allocator),
                 .puts = std.StringHashMap(RequestFn).init(allocator),
@@ -27,16 +25,11 @@ pub fn Router(comptime ContextType: anytype) type {
         }
 
         pub fn deinit(self: *Self) void {
-            self.allocator.free(self.redirect_url);
             self.gets.deinit();
             self.posts.deinit();
             self.puts.deinit();
             self.deletes.deinit();
             self.patches.deinit();
-        }
-
-        pub fn redirect(self: *Self, r: zap.SimpleRequest) void {
-            r.redirectTo(self.redirect_url, zap.StatusCode.see_other) catch return;
         }
 
         pub fn get(self: *Self, path: []const u8, handler: RequestFn) !void {
@@ -59,7 +52,7 @@ pub fn Router(comptime ContextType: anytype) type {
             try self.patches.put(path, handler);
         }
 
-        pub fn dispatch(self: *Self, r: zap.SimpleRequest, c: ?*ContextType) void {
+        pub fn dispatch(self: *Self, r: zap.SimpleRequest, c: ?ContextType) void {
             std.debug.print("in dispatch:\n", .{});
             if (r.query) |query| {
                 std.debug.print("QUERY: {s}\n", .{query});
@@ -92,6 +85,7 @@ pub fn Router(comptime ContextType: anytype) type {
                 }
             }
 
+            std.debug.print("in dispatch: 404 now\n", .{});
             r.setStatus(zap.StatusCode.not_found);
             r.sendBody("") catch return;
         }
