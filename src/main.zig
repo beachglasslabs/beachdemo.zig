@@ -11,6 +11,7 @@ const User = Users.User;
 const Session = Sessions.Session;
 
 fn auth(router: *Router.Router(User), r: zap.SimpleRequest, _: ?User) void {
+    std.debug.print("rendering auth\n", .{});
     router.renderTemplate(r, "web/templates/auth.html", .{}) catch return;
 }
 

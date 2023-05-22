@@ -61,6 +61,7 @@ pub fn Router(comptime ContextType: anytype) type {
             if (r.path) |path| {
                 std.debug.print("PATH: {s}\n", .{path});
                 if (r.method) |method| {
+                    std.debug.print("METHOD: {s}\n", .{method});
                     if (std.mem.eql(u8, method, "GET")) {
                         if (self.gets.get(path)) |handler| {
                             return handler(self, r, c);
@@ -107,6 +108,7 @@ pub fn Router(comptime ContextType: anytype) type {
             defer ret.deinit();
             if (r.setContentType(.HTML)) {
                 if (ret.str()) |resp| {
+                    r.setStatus(zap.StatusCode.ok);
                     try r.sendBody(resp);
                 } else {
                     r.setStatus(zap.StatusCode.not_found);
