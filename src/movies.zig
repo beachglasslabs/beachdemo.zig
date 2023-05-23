@@ -19,7 +19,7 @@ pub const Movie = struct {
 pub fn init(a: std.mem.Allocator, data_path: []const u8) !Self {
     var movies = std.StringHashMap(Movie).init(a);
     try fetch_data(&movies, a, data_path);
-    std.debug.print("movies: {}\n", .{movies});
+    std.debug.print("movies: found {d} movies\n", .{movies.count()});
     return .{
         .allocator = a,
         .movies = movies,
@@ -58,7 +58,12 @@ pub fn deinit(self: *Self) void {
     var iter = self.movies.valueIterator();
     while (iter.next()) |movie| {
         defer self.allocator.free(movie.id);
-        //defer self.allocator.destroy(movie);
+        defer self.allocator.free(movie.title);
+        defer self.allocator.free(movie.description);
+        defer self.allocator.free(movie.videoUrl);
+        defer self.allocator.free(movie.thumbnailUrl);
+        defer self.allocator.free(movie.genre);
+        defer self.allocator.free(movie.duration);
     }
     self.movies.deinit();
 }

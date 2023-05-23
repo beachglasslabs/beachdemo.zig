@@ -19,11 +19,11 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
                 .router = router,
                 .fascade = zap.SimpleEndpoint.init(.{
                     .path = "/", // we do everything
-                    .get = get,
-                    .post = post,
-                    .put = put,
-                    .delete = delete,
-                    .patch = patch,
+                    .get = handleRequest,
+                    .post = handleRequest,
+                    .put = handleRequest,
+                    .delete = handleRequest,
+                    .patch = handleRequest,
                 }),
             };
         }
@@ -42,6 +42,7 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
 
         pub fn addEndpoint(self: *Self, ep: *zap.SimpleEndpoint) !void {
             for (self.endpoints.items) |other| {
+                std.debug.print("middleware: comparing {s} with {s}\n", .{ ep.settings.path, other.settings.path });
                 if (std.mem.startsWith(
                     u8,
                     other.settings.path,
@@ -54,10 +55,11 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
                     return zap.EndpointListenerError.EndpointPathShadowError;
                 }
             }
+            std.debug.print("middleware: adding endpoint {s}\n", .{ep.settings.path});
             try self.endpoints.append(ep);
         }
 
-        fn _internal_handleRequest(self: *Self, r: zap.SimpleRequest, handler: ?RequestFn) void {
+        fn _internal_handleRequest(self: *Self, r: zap.SimpleRequest) void {
             switch (self.authenticator.authenticateRequest(&r)) {
                 .AuthOK => {
                     std.debug.print("middleware: authenticated\n", .{});
@@ -68,9 +70,25 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
                         for (self.endpoints.items) |ep| {
                             if (std.mem.startsWith(u8, p, ep.settings.path)) {
                                 std.debug.print("middleware.auth: dispatch to endpoint {s}\n", .{ep.settings.path});
-                                handler.?(ep, r);
-                                std.debug.print("middleware.auth: finished dispatch to endpoint {s}\n", .{ep.settings.path});
-                                return;
+                                if (r.method) |m| {
+                                    if (std.mem.eql(u8, m, "GET")) {
+                                        const h = ep.settings.get orelse break;
+                                        return h(ep, r);
+                                    } else if (std.mem.eql(u8, m, "POST")) {
+                                        const h = ep.settings.post orelse break;
+                                        return h(ep, r);
+                                    } else if (std.mem.eql(u8, m, "PUT")) {
+                                        const h = ep.settings.put orelse break;
+                                        return h(ep, r);
+                                    } else if (std.mem.eql(u8, m, "DELETE")) {
+                                        const h = ep.settings.delete orelse break;
+                                        return h(ep, r);
+                                    } else if (std.mem.eql(u8, m, "PATCH")) {
+                                        const h = ep.settings.patch orelse break;
+                                        return h(ep, r);
+                                    }
+                                }
+                                break;
                             }
                         }
                         std.debug.print("middleware.auth: dispatch to router {s}\n", .{p});
@@ -95,38 +113,10 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
         }
 
         /// here, the fascade will be passed in
-        pub fn get(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
-            std.debug.print("middleware.get\n", .{});
+        pub fn handleRequest(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
+            std.debug.print("middleware.handleRequest\n", .{});
             const myself: *Self = @fieldParentPtr(Self, "fascade", e);
-            _internal_handleRequest(myself, r, e.settings.get);
-        }
-
-        /// here, the fascade will be passed in
-        pub fn post(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
-            std.debug.print("middleware.post\n", .{});
-            const myself: *Self = @fieldParentPtr(Self, "fascade", e);
-            _internal_handleRequest(myself, r, e.settings.post);
-        }
-
-        /// here, the fascade will be passed in
-        pub fn put(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
-            std.debug.print("middleware.put\n", .{});
-            const myself: *Self = @fieldParentPtr(Self, "fascade", e);
-            _internal_handleRequest(myself, r, e.settings.put);
-        }
-
-        /// here, the fascade will be passed in
-        pub fn delete(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
-            std.debug.print("middleware.delete\n", .{});
-            const myself: *Self = @fieldParentPtr(Self, "fascade", e);
-            _internal_handleRequest(myself, r, e.settings.delete);
-        }
-
-        /// here, the fascade will be passed in
-        pub fn patch(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
-            std.debug.print("middleware.patch\n", .{});
-            const myself: *Self = @fieldParentPtr(Self, "fascade", e);
-            _internal_handleRequest(myself, r, e.settings.patch);
+            _internal_handleRequest(myself, r);
         }
     };
 }

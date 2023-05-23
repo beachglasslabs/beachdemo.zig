@@ -12,7 +12,7 @@ const User = Users.User;
 const Session = Sessions.Session;
 
 fn auth(router: *Router.Router(User), r: zap.SimpleRequest, _: ?User) void {
-    std.debug.print("rendering authl\n", .{});
+    std.debug.print("rendering auth\n", .{});
     router.renderTemplate(r, "web/templates/auth.html", .{}) catch return;
 }
 
@@ -106,7 +106,7 @@ pub fn main() !void {
     // add endpoints
     try dispatcher.addEndpoint(user_endpoint.getEndpoint());
     try dispatcher.addEndpoint(session_endpoint.getEndpoint());
-    //try dispatcher.addEndpoint(movie_endpoint.getEndpoint());
+    try dispatcher.addEndpoint(movie_endpoint.getEndpoint());
     try listener.addEndpoint(dispatcher.getEndpoint());
 
     // listen

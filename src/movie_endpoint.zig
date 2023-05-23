@@ -52,7 +52,7 @@ fn getMovie(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     const self = @fieldParentPtr(Self, "endpoint", e);
     if (r.path) |path| {
         // /movies
-        if (path.len == e.settings.path.len) {
+        if (path.len == self.endpoint.settings.path.len) {
             return self.listMovies(r);
         }
         var jsonbuf: [256]u8 = undefined;

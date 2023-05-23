@@ -219,7 +219,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                     }
                 }
             } else |err| {
-                std.debug.print("unreachable: SessionAuth.logout: {any}", .{err});
+                std.debug.print("unreachable: logout: {any}", .{err});
             }
         }
 
