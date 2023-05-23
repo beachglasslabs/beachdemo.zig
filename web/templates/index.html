@@ -18,7 +18,7 @@
   <body>
     <script>
       function playMovie(id) {
-          location.href = '/watch/' + id
+          location.href = '/movies/' + id + '/play'
       }
       document.addEventListener('alpine:init', () => {
           Alpine.store('favorites', {

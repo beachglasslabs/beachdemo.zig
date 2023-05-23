@@ -102,7 +102,7 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
                         return;
                     }
                     if (r.path) |p| {
-                        std.debug.print("middleware.handled: dispatch to router {s}\n", .{p});
+                        std.debug.print("middleware.handled: dispatch to no-context router {s}\n", .{p});
                         self.router.dispatch(r, null);
                     }
                 },

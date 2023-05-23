@@ -1,5 +1,6 @@
 const std = @import("std");
 const zap = @import("zap");
+const Template = @import("template.zig");
 const Movies = @import("movies.zig");
 const Movie = Movies.Movie;
 
@@ -8,6 +9,7 @@ const Movie = Movies.Movie;
 pub const Self = @This();
 
 allocator: std.mem.Allocator = undefined,
+renderer: Template = undefined,
 endpoint: zap.SimpleEndpoint = undefined,
 movies: Movies = undefined,
 
@@ -18,6 +20,7 @@ pub fn init(
 ) !Self {
     return .{
         .allocator = a,
+        .renderer = Template.init(a),
         .movies = try Movies.init(a, data_path),
         .endpoint = zap.SimpleEndpoint.init(.{
             .path = movie_path,
@@ -27,6 +30,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *Self) void {
+    self.renderer.deinit();
     self.movies.deinit();
 }
 
@@ -39,7 +43,11 @@ fn movieIdFromPath(self: *Self, path: []const u8) ?[]const u8 {
         if (path[self.endpoint.settings.path.len] != '/') {
             return null;
         }
-        return path[self.endpoint.settings.path.len + 1 ..];
+        var end = path.len;
+        if (std.mem.endsWith(u8, path, "/play")) {
+            end = end - 5;
+        }
+        return path[self.endpoint.settings.path.len + 1 .. end];
     }
     return null;
 }
@@ -64,9 +72,13 @@ fn getMovie(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
                     return;
                 }
             } else if (self.movies.get(id)) |movie| {
-                const json = std.json.stringifyAlloc(self.allocator, movie, .{}) catch return;
-                defer self.allocator.free(json);
-                r.sendJson(json) catch return;
+                if (std.mem.endsWith(u8, path, "/play")) {
+                    self.renderer.render(r, "web/templates/movie.html", .{ .id = movie.id }) catch return;
+                } else {
+                    const json = std.json.stringifyAlloc(self.allocator, movie, .{}) catch return;
+                    defer self.allocator.free(json);
+                    r.sendJson(json) catch return;
+                }
                 return;
             }
         }

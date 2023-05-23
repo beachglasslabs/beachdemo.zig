@@ -1,9 +1,11 @@
 const std = @import("std");
 const zap = @import("zap");
+const Template = @import("template.zig");
 
 pub fn Router(comptime ContextType: anytype) type {
     return struct {
         allocator: std.mem.Allocator = undefined,
+        renderer: Template = undefined,
         gets: std.StringHashMap(RequestFn) = undefined,
         puts: std.StringHashMap(RequestFn) = undefined,
         posts: std.StringHashMap(RequestFn) = undefined,
@@ -16,6 +18,7 @@ pub fn Router(comptime ContextType: anytype) type {
         pub fn init(allocator: std.mem.Allocator) !Self {
             return .{
                 .allocator = allocator,
+                .renderer = Template.init(allocator),
                 .gets = std.StringHashMap(RequestFn).init(allocator),
                 .posts = std.StringHashMap(RequestFn).init(allocator),
                 .puts = std.StringHashMap(RequestFn).init(allocator),
@@ -25,6 +28,7 @@ pub fn Router(comptime ContextType: anytype) type {
         }
 
         pub fn deinit(self: *Self) void {
+            self.renderer.deinit();
             self.gets.deinit();
             self.posts.deinit();
             self.puts.deinit();
@@ -92,31 +96,7 @@ pub fn Router(comptime ContextType: anytype) type {
         }
 
         pub fn renderTemplate(self: *Self, r: zap.SimpleRequest, t: []const u8, m: anytype) !void {
-            const file = try std.fs.cwd().openFile(
-                t,
-                .{},
-            );
-            defer file.close();
-
-            const size = (try file.stat()).size;
-
-            const template = try file.reader().readAllAlloc(self.allocator, size);
-            defer self.allocator.free(template);
-
-            const p = try zap.MustacheNew(template);
-            defer zap.MustacheFree(p);
-            const ret = zap.MustacheBuild(p, m);
-            defer ret.deinit();
-            if (r.setContentType(.HTML)) {
-                if (ret.str()) |resp| {
-                    r.setStatus(zap.StatusCode.ok);
-                    try r.sendBody(resp);
-                } else {
-                    r.setStatus(zap.StatusCode.not_found);
-                    try r.sendBody("");
-                }
-            } else |err| return err;
-            return;
+            try self.renderer.render(r, t, m);
         }
     };
 }
