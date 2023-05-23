@@ -2,14 +2,13 @@ const std = @import("std");
 const zap = @import("zap");
 
 /// Wrap multiple endpoints
-pub fn Middleware(comptime Router: type, comptime Authenticator: type, comptime ContextType: type) type {
+pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
     return struct {
         endpoints: std.ArrayList(*zap.SimpleEndpoint),
         authenticator: *Authenticator,
         router: *Router,
         fascade: zap.SimpleEndpoint,
 
-        pub const ContextRequestFn = *const fn (*Router, zap.SimpleRequest, *ContextType) void;
         pub const RequestFn = *const fn (*zap.SimpleEndpoint, zap.SimpleRequest) void;
         const Self = @This();
 

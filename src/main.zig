@@ -100,13 +100,13 @@ pub fn main() !void {
     defer authenticator.deinit();
 
     // create authenticating endpoint
-    const Dispatcher = Middleware.Middleware(Router.Router(User), Authenticator, zap.AuthResult);
+    const Dispatcher = Middleware.Middleware(Router.Router(User), Authenticator);
     var dispatcher = Dispatcher.init(allocator, &router, &authenticator);
-    try dispatcher.addEndpoint(user_endpoint.getEndpoint());
-    try dispatcher.addEndpoint(session_endpoint.getEndpoint());
-    try dispatcher.addEndpoint(movie_endpoint.getEndpoint());
 
     // add endpoints
+    try dispatcher.addEndpoint(user_endpoint.getEndpoint());
+    try dispatcher.addEndpoint(session_endpoint.getEndpoint());
+    //try dispatcher.addEndpoint(movie_endpoint.getEndpoint());
     try listener.addEndpoint(dispatcher.getEndpoint());
 
     // listen
