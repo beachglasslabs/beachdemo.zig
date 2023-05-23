@@ -7,6 +7,7 @@ movies: std.StringHashMap(Movie) = undefined,
 pub const Self = @This();
 
 pub const Movie = struct {
+    id: []const u8 = "",
     title: []const u8,
     description: []const u8,
     videoUrl: []const u8,
@@ -16,15 +17,16 @@ pub const Movie = struct {
 };
 
 pub fn init(a: std.mem.Allocator, data_path: []const u8) !Self {
-    try fetch_data(a, data_path);
-
+    var movies = std.StringHashMap(Movie).init(a);
+    try fetch_data(&movies, a, data_path);
+    std.debug.print("movies: {}\n", .{movies});
     return .{
         .allocator = a,
-        .movies = std.StringHashMap(Movie).init(a),
+        .movies = movies,
     };
 }
 
-fn fetch_data(a: std.mem.Allocator, filename: []const u8) !void {
+fn fetch_data(movies: *std.StringHashMap(Movie), a: std.mem.Allocator, filename: []const u8) !void {
     const file = try std.fs.cwd().openFile(filename, .{});
     defer file.close();
 
@@ -33,15 +35,31 @@ fn fetch_data(a: std.mem.Allocator, filename: []const u8) !void {
     const contents = try file.reader().readAllAlloc(a, size);
     defer a.free(contents);
 
-    var movie = try std.json.parseFromSlice(Movie, a, contents, .{});
-    std.debug.print("movies are {any}\n", .{movie});
+    const movielist = try std.json.parseFromSlice([]const Movie, a, contents, .{
+        .ignore_unknown_fields = true,
+    });
+    defer std.json.parseFree([]const Movie, a, movielist);
+
+    for (movielist) |m| {
+        var movie: Movie = undefined;
+        movie.id = try std.fmt.allocPrint(a, "{s}", .{uuid.newV4()});
+        movie.title = try a.dupe(u8, m.title);
+        movie.description = try a.dupe(u8, m.description);
+        movie.videoUrl = try a.dupe(u8, m.videoUrl);
+        movie.thumbnailUrl = try a.dupe(u8, m.thumbnailUrl);
+        movie.genre = try a.dupe(u8, m.genre);
+        movie.duration = try a.dupe(u8, m.duration);
+        std.debug.print("movie: {s}={s}\n", .{ movie.id, movie.title });
+        try movies.put(movie.id, movie);
+    }
 }
 
 pub fn deinit(self: *Self) void {
-    //var iter = self.movies.valueIterator();
-    //while (iter.next()) |movie| {
-    //    defer self.allocator.free(movie.id);
-    //}
+    var iter = self.movies.valueIterator();
+    while (iter.next()) |movie| {
+        defer self.allocator.free(movie.id);
+        //defer self.allocator.destroy(movie);
+    }
     self.movies.deinit();
 }
 
@@ -119,14 +137,7 @@ const JsonMovieIteratorWithRaceCondition = struct {
             // create slices from its first and last name buffers
             //
             // SEE ABOVE NOTE regarding race condition why this is can be problematic
-            var movie: Movie = pMovie.*;
-            //std.mem.copy(u8, &movie.title, &pMovie.title);
-            //std.mem.copy(u8, &movie.description, &pMovie.description);
-            //std.mem.copy(u8, &movie.videoUrl, &pMovie.videoUrl);
-            //std.mem.copy(u8, &movie.thumbnailUrl, &pMovie.thumbnailUrl);
-            //std.mem.copy(u8, &movie.genre, &pMovie.genre);
-            //std.mem.copy(u8, &movie.duration, &pMovie.duration);
-            return movie;
+            return pMovie.*;
         }
         return null;
     }

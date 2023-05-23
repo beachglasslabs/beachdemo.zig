@@ -75,6 +75,12 @@ pub fn main() !void {
     var movie_endpoint = try MovieEndpoint.init(allocator, "/movies", "web/movies.json");
     defer movie_endpoint.deinit();
 
+    var movies = movie_endpoint.movies.movies;
+    var iter = movies.valueIterator();
+    while (iter.next()) |m| {
+        std.debug.print("got movie {s}\n", .{m.title});
+    }
+
     // create authenticator
     const Authenticator = UserSession.SessionAuth(Users, Sessions, User);
     const auth_args = UserSession.SessionAuthArgs{
