@@ -74,6 +74,24 @@ pub fn get(self: *Self, id: []const u8) ?Movie {
     return self.movies.get(id);
 }
 
+pub fn random(self: *Self) ?Movie {
+    var rng = std.rand.DefaultPrng.init(@intCast(u64, std.time.timestamp()));
+    const r = rng.random();
+
+    const n = r.uintLessThan(u32, self.movies.count());
+    std.debug.print("movie.random: {d}\n", .{n});
+    var iter = self.movies.valueIterator();
+    var i: u32 = 0;
+    while (iter.next()) |movie| {
+        if (i == n) {
+            std.debug.print("movie.random: returning {s}\n", .{movie.id});
+            return movie.*;
+        }
+        i += 1;
+    }
+    return null;
+}
+
 pub fn toJSON(self: *Self) ![]const u8 {
 
     // We create a Movie list that's JSON-friendly

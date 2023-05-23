@@ -30,10 +30,6 @@ pub fn deinit(self: *Self) void {
     self.movies.deinit();
 }
 
-pub fn getMovies(self: *Self) *Movies {
-    return &self.movies;
-}
-
 pub fn getEndpoint(self: *Self) *zap.SimpleEndpoint {
     return &self.endpoint;
 }
@@ -53,17 +49,30 @@ fn getMovie(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     if (r.path) |path| {
         // /movies
         if (path.len == self.endpoint.settings.path.len) {
+            std.debug.print("movie endpoint.get: all movies\n", .{});
             return self.listMovies(r);
         }
-        var jsonbuf: [256]u8 = undefined;
         if (self.movieIdFromPath(path)) |id| {
-            if (self.movies.get(id)) |movie| {
-                if (zap.stringifyBuf(&jsonbuf, movie, .{})) |json| {
+            std.debug.print("movie endpoint.get: looking for {s}\n", .{id});
+            if (std.mem.eql(u8, id, "random")) {
+                if (self.movies.random()) |movie| {
+                    std.debug.print("movie endpoint.get: found random movie {s}\n", .{movie.title});
+                    const json = std.json.stringifyAlloc(self.allocator, movie, .{}) catch return;
+                    defer self.allocator.free(json);
+                    std.debug.print("movie endpoint.get: {s}\n", .{json});
                     r.sendJson(json) catch return;
+                    return;
                 }
+            } else if (self.movies.get(id)) |movie| {
+                const json = std.json.stringifyAlloc(self.allocator, movie, .{}) catch return;
+                defer self.allocator.free(json);
+                r.sendJson(json) catch return;
+                return;
             }
         }
     }
+    r.setStatus(zap.StatusCode.not_found);
+    r.sendJson("") catch return;
 }
 
 fn listMovies(self: *Self, r: zap.SimpleRequest) void {

@@ -44,7 +44,7 @@ pub fn newAvatarImage() []const u8 {
     var rng = std.rand.DefaultPrng.init(@intCast(u64, std.time.timestamp()));
     const random = rng.random();
 
-    const i = random.uintLessThan(u8, 4);
+    const i = random.uintLessThan(u8, avatar_images.len);
     return avatar_images[i];
 }
 
