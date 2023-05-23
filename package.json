@@ -9,7 +9,7 @@
     "build:css": "npx tailwindcss build -i web/css/main.css -o public/style.css",
     "zap": "python -m http.server --directory ~/download",
     "build": "zig build",
-    "dev": "npm run build:css && npm run dev"
+    "dev": "npm run build:css && npm run serve"
   },
   "devDependencies": {
     "tailwindcss": "^3.3.2"

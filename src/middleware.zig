@@ -70,6 +70,7 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type, comptime 
                             if (std.mem.startsWith(u8, p, ep.settings.path)) {
                                 std.debug.print("middleware.auth: dispatch to endpoint {s}\n", .{ep.settings.path});
                                 handler.?(ep, r);
+                                std.debug.print("middleware.auth: finished dispatch to endpoint {s}\n", .{ep.settings.path});
                                 return;
                             }
                         }

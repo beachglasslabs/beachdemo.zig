@@ -181,7 +181,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                         std.debug.print("login.session: COOKIE IS BAD!!!: {s}\n", .{cookie.str});
                     }
                 } else {
-                    std.debug.print("login.session: no {s} cookie found\n", .{self.settings.cookie_name});
+                    std.debug.print("login.session: no cookie found\n", .{});
                 }
             } else |err| {
                 std.debug.print("unreachable: could not check for cookie in login.session: {}\n", .{err});
