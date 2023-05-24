@@ -9,7 +9,6 @@ const UserSession = @import("auth.zig");
 const User = @import("users.zig").User;
 
 fn auth(router: *Router.Router(User), r: zap.SimpleRequest, _: ?User) void {
-    std.debug.print("rendering auth\n", .{});
     router.renderTemplate(r, "web/templates/auth.html", .{}) catch return;
 }
 

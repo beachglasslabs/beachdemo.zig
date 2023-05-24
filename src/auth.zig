@@ -123,6 +123,11 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
             try r.redirectTo(self.settings.signin_url, self.settings.redirect_code);
         }
 
+        fn redirectFailure(self: *Self, r: *const zap.SimpleRequest) !void {
+            std.debug.print("redirect failure: {s}\n", .{self.settings.signin_url});
+            try r.redirectTo(self.settings.signin_url, self.settings.redirect_code);
+        }
+
         pub fn registerUser(self: *Self, _: *const zap.SimpleRequest, name: []const u8, subject: []const u8, password: []const u8) bool {
             if (self.users.getBySub(subject)) |user| {
                 std.debug.print("register.user: {s} already exists, login instead\n", .{user.email});
@@ -314,6 +319,10 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                                                 self.redirectLogin(r) catch |err| {
                                                     std.debug.print("internal.authenticate: redirect failed: {}\n", .{err});
                                                 };
+                                            } else {
+                                                self.redirectFailure(r) catch |err| {
+                                                    std.debug.print("internal.authenticate: redirect failed: {}\n", .{err});
+                                                };
                                             }
                                             return .Handled;
                                         }
@@ -363,7 +372,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                 .AuthFailed => {
                     // we need to redirect and return .Handled
                     std.debug.print("auth.authenticateRequest: NOT returning .AuthFailed\n", .{});
-                    self.redirectLogout(r) catch |err| {
+                    self.redirectFailure(r) catch |err| {
                         std.debug.print("auth.authenticate: redirect failed: {}\n", .{err});
                     };
                     return .Handled;

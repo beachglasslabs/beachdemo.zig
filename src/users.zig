@@ -137,9 +137,9 @@ pub fn delete(self: *Self, id: []const u8) bool {
 }
 
 pub fn getByEmail(self: *Self, sub: []const u8) ?User {
-    std.debug.print("getByEmail{s}\n", .{sub});
+    std.debug.print("getByEmail: {s}\n", .{sub});
     if (self.users_by_email.getPtr(sub)) |pUser| {
-        std.debug.print("getByEmail found {s}\n", .{pUser.id});
+        std.debug.print("getByEmail: found {s}\n", .{pUser.id});
         return getById(self, pUser.id);
     }
     return null;

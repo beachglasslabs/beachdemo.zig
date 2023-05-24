@@ -65,6 +65,7 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
                 .AuthOK => {
                     std.debug.print("middleware: authenticated\n", .{});
                     if (r.isFinished()) {
+                        std.debug.print("middleware: already processed\n", .{});
                         return;
                     }
                     if (r.path) |p| {
@@ -100,6 +101,7 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
                 .Handled => {
                     std.debug.print("middleware: handled\n", .{});
                     if (r.isFinished()) {
+                        std.debug.print("middleware: already processed\n", .{});
                         return;
                     }
                     if (r.path) |p| {
@@ -107,6 +109,7 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
                             if (std.mem.startsWith(u8, p, ep.settings.path)) {
                                 std.debug.print("middleware.auth: dispatch to endpoint {s}\n", .{ep.settings.path});
                                 if (r.method) |m| {
+                                    std.debug.print("middleware.auth: method {s}\n", .{m});
                                     if (std.mem.eql(u8, m, "GET")) {
                                         const h = ep.settings.get orelse break;
                                         return h(ep, r);
@@ -139,7 +142,6 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
 
         /// here, the fascade will be passed in
         pub fn handleRequest(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
-            std.debug.print("middleware.handleRequest\n", .{});
             const myself: *Self = @fieldParentPtr(Self, "fascade", e);
             _internal_handleRequest(myself, r);
         }

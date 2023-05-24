@@ -96,6 +96,7 @@ pub fn Router(comptime ContextType: anytype) type {
         }
 
         pub fn renderTemplate(self: *Self, r: zap.SimpleRequest, t: []const u8, m: anytype) !void {
+            std.debug.print("rendering {s}\n", .{t});
             try self.renderer.render(r, t, m);
         }
     };
