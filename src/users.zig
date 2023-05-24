@@ -19,6 +19,7 @@ const InternalUser = struct {
     mailbuf: [64]u8 = undefined,
     maillen: usize = undefined,
     hashbuf: [Hash.digest_length * 2]u8 = undefined,
+    saltbuf: [16]u8 = undefined,
     avatar: []const u8 = undefined,
 };
 
@@ -27,12 +28,14 @@ pub const User = struct {
     name: []const u8,
     email: []const u8,
     hash: []const u8,
+    salt: []const u8,
     avatar: []const u8,
 
     pub fn checkPassword(self: *const User, subject: []const u8, password: []const u8) bool {
         var hasher = Hash.init(.{});
         hasher.update(subject);
         hasher.update(password);
+        hasher.update(self.salt);
         var digest: [Hash.digest_length]u8 = undefined;
         hasher.final(&digest);
         const hash = std.fmt.bytesToHex(digest, .lower);
@@ -48,10 +51,11 @@ pub fn newAvatarImage() []const u8 {
     return avatar_images[i];
 }
 
-pub fn hashPassword(buf: []u8, subject: []const u8, password: []const u8) !void {
+pub fn hashPassword(buf: []u8, subject: []const u8, password: []const u8, salt: []const u8) !void {
     var hasher = Hash.init(.{});
     hasher.update(subject);
     hasher.update(password);
+    hasher.update(salt);
     var digest: [Hash.digest_length]u8 = undefined;
     hasher.final(&digest);
     const hash = std.fmt.bytesToHex(digest, .lower);
@@ -89,12 +93,20 @@ pub fn add(self: *Self, name: []const u8, mail: []const u8, pass: []const u8) ![
     std.mem.copy(u8, user.mailbuf[0..], mail);
     user.maillen = mail.len;
 
-    try hashPassword(&user.hashbuf, mail, pass);
-
     // We lock only on insertion, deletion, and listing
     self.lock.lock();
     defer self.lock.unlock();
+
+    std.mem.copy(u8, &user.saltbuf, &uuid.newV4().bytes);
+    try hashPassword(
+        &user.hashbuf,
+        mail,
+        pass,
+        &user.saltbuf,
+    );
+
     user.id = try std.fmt.allocPrint(self.allocator, "{s}", .{uuid.newV4()});
+
     user.avatar = newAvatarImage();
     if (self.users_by_id.put(user.id, user)) {
         var newUser = self.getById(user.id).?;
@@ -143,6 +155,7 @@ pub fn getById(self: *Self, id: []const u8) ?User {
             .name = pUser.namebuf[0..pUser.namelen],
             .email = pUser.mailbuf[0..pUser.maillen],
             .hash = &pUser.hashbuf,
+            .salt = &pUser.saltbuf,
             .avatar = pUser.avatar,
         };
     } else {
@@ -255,6 +268,7 @@ const JsonUserIteratorWithRaceCondition = struct {
                 .name = pUser.*.namebuf[0..pUser.*.namelen],
                 .email = pUser.*.mailbuf[0..pUser.*.maillen],
                 .hash = &pUser.*.hashbuf,
+                .salt = &pUser.*.saltbuf,
                 .avatar = pUser.*.avatar,
             };
             if (pUser.*.namelen == 0) {
