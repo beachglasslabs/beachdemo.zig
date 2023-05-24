@@ -1,12 +1,13 @@
 .{
     .name = "beachtube",
-    .version = "0.0.1",
+    .version = "0.0.2",
 
     .dependencies = .{
-        // zap release-0.0.24
+        // zap v0.1.2-pre
         .zap = .{
-            .url = "https://github.com/zigzap/zap/archive/refs/tags/release-0.0.24.tar.gz",
-            .hash = "1220f520fcdd4b3adbca918deeb42f512f7ef4a827680eea8af9abc64b90ed7a5e78",
+            .url = "https://github.com/zigzap/zap/archive/refs/tags/v0.1.2-pre.tar.gz",
+            //.url = "http://localhost:8000/v0.1.2-pre.tar.gz",
+            .hash = "1220fd222f2f0ddcd3dbc50fae56a8be337002c1fd54e73a5ca67c379ab8955a5a02",
         }
     }
 }

@@ -150,6 +150,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                         std.debug.print("login.user: session creation failed: {}\n", .{err});
                         return false;
                     };
+                    defer self.allocator.free(token);
                     // now set the cookie header
                     r.setCookie(.{
                         .name = self.settings.cookie_name,
@@ -385,9 +386,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
             std.debug.print("create token={s}\n", .{token});
             if (!self.session_tokens.contains(token)) {
                 std.debug.print("putting token={s}\n", .{token});
-                try self.session_tokens.put(token, sessionid);
-            } else {
-                defer self.allocator.free(token);
+                try self.session_tokens.put(try self.allocator.dupe(u8, token), sessionid);
             }
             return token;
         }
