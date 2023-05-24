@@ -61,7 +61,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
         sessions: *SessionManager,
         settings: SessionAuthArgs,
 
-        sessionTokens: SessionTokenMap,
+        session_tokens: SessionTokenMap,
 
         const Self = @This();
         const SessionTokenMap = std.StringHashMap([]const u8);
@@ -92,11 +92,17 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                     .cookie_maxage = args.cookie_maxage,
                     .redirect_code = args.redirect_code,
                 },
-                .sessionTokens = SessionTokenMap.init(allocator),
+                .session_tokens = SessionTokenMap.init(allocator),
             };
         }
 
-        pub fn deinit(self: *const Self) void {
+        pub fn deinit(self: *Self) void {
+            var iter = self.session_tokens.iterator();
+            while (iter.next()) |kv| {
+                self.allocator.free(kv.key_ptr.*);
+                self.allocator.free(kv.value_ptr.*);
+            }
+            self.session_tokens.deinit();
             self.allocator.free(self.settings.name_param);
             self.allocator.free(self.settings.subject_param);
             self.allocator.free(self.settings.password_param);
@@ -173,7 +179,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                     defer cookie.deinit();
                     // locked or unlocked token lookup
                     std.debug.print("login.session: cookie {s}\n", .{cookie.str});
-                    if (self.sessionTokens.contains(cookie.str)) {
+                    if (self.session_tokens.contains(cookie.str)) {
                         // cookie is a valid session!
                         std.debug.print("login.session: COOKIE IS OK!!!: {s}\n", .{cookie.str});
                         return true;
@@ -212,7 +218,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                     std.debug.print("logout: removing cookie {s}\n", .{cookie.str});
                     defer cookie.deinit();
                     // if cookie is a valid session, remove it!
-                    if (self.sessionTokens.fetchRemove(cookie.str)) |maybe_session| {
+                    if (self.session_tokens.fetchRemove(cookie.str)) |maybe_session| {
                         const sessionid = maybe_session.value;
                         std.debug.print("logout: removing session id {s}\n", .{sessionid});
                         _ = self.sessions.delete(sessionid);
@@ -232,10 +238,10 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                     defer cookie.deinit();
                     // locked or unlocked token lookup
                     std.debug.print("current.user: cookie {s}\n", .{cookie.str});
-                    if (self.sessionTokens.contains(cookie.str)) {
+                    if (self.session_tokens.contains(cookie.str)) {
                         // cookie is a valid session!
                         std.debug.print("current.user: COOKIE IS OK!!!: {s}\n", .{cookie.str});
-                        const sessionid = self.sessionTokens.get(cookie.str) orelse return null;
+                        const sessionid = self.session_tokens.get(cookie.str) orelse return null;
                         const session = self.sessions.get(sessionid) orelse return null;
                         var user = self.users.get(session.userid) orelse return null;
                         std.debug.print("current.user: found {s}\n", .{user.name});
@@ -375,11 +381,12 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
         fn createAndStoreSessionToken(self: *Self, subject: []const u8, userid: []const u8) ![]const u8 {
             const sessionid = try self.sessions.post(userid);
             const token = try self.createSessionToken(subject, sessionid);
-            // put locked or not
             std.debug.print("create token={s}\n", .{token});
-            if (!self.sessionTokens.contains(token)) {
+            if (!self.session_tokens.contains(token)) {
                 std.debug.print("putting token={s}\n", .{token});
-                try self.sessionTokens.put(token, sessionid);
+                try self.session_tokens.put(token, sessionid);
+            } else {
+                defer self.allocator.free(token);
             }
             return token;
         }
