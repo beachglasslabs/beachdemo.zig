@@ -61,9 +61,10 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
         }
 
         fn _internal_handleRequest(self: *Self, r: zap.SimpleRequest) void {
+            std.debug.print("middleware.handling\n", .{});
             switch (self.authenticator.authenticateRequest(&r)) {
                 .AuthOK => {
-                    std.debug.print("middleware: authenticated\n", .{});
+                    std.debug.print("middleware.authenticated\n", .{});
                     if (r.isFinished()) {
                         std.debug.print("middleware: already processed\n", .{});
                         return;
@@ -99,7 +100,7 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
                     }
                 },
                 .Handled => {
-                    std.debug.print("middleware: handled\n", .{});
+                    std.debug.print("middleware.handled\n", .{});
                     if (r.isFinished()) {
                         std.debug.print("middleware: already processed\n", .{});
                         return;
@@ -134,9 +135,7 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
                         self.router.dispatch(r, null);
                     }
                 },
-                else => {
-                    std.debug.print("middleware.failed\n", .{});
-                },
+                .AuthFailed => unreachable,
             }
         }
 

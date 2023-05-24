@@ -8,10 +8,6 @@ const Middleware = @import("middleware.zig");
 const UserSession = @import("auth.zig");
 const User = @import("users.zig").User;
 
-fn auth(router: *Router.Router(User), r: zap.SimpleRequest, _: ?User) void {
-    router.renderTemplate(r, "web/templates/auth.html", .{}) catch return;
-}
-
 fn index(router: *Router.Router(User), r: zap.SimpleRequest, maybe_user: ?User) void {
     if (maybe_user) |user| {
         std.debug.print("index: user is {s}\n", .{user.name});
@@ -31,7 +27,7 @@ fn profiles(router: *Router.Router(User), r: zap.SimpleRequest, maybe_user: ?Use
 }
 
 fn redirect(r: zap.SimpleRequest) void {
-    r.redirectTo("/auth", zap.StatusCode.see_other) catch return;
+    r.redirectTo("/sessions", zap.StatusCode.see_other) catch return;
 }
 
 pub fn main() !void {
@@ -47,7 +43,6 @@ pub fn main() !void {
         defer router.deinit();
 
         try router.get("/", index);
-        try router.get("/auth", auth);
         try router.get("/profiles", profiles);
 
         // setup listener
@@ -85,8 +80,8 @@ pub fn main() !void {
             .name_param = "name",
             .subject_param = "email",
             .password_param = "password",
-            .signin_url = "/auth",
-            .signup_url = "/auth",
+            .signin_url = "/sessions",
+            .signup_url = "/sessions",
             .success_url = "/profiles",
             .signin_callback = "/sessions",
             .signup_callback = "/users",

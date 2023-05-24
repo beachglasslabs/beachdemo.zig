@@ -1,5 +1,6 @@
 const std = @import("std");
 const zap = @import("zap");
+const Template = @import("template.zig");
 const Sessions = @import("sessions.zig");
 const Session = Sessions.Session;
 const Users = @import("users.zig");
@@ -9,6 +10,7 @@ const Users = @import("users.zig");
 pub const Self = @This();
 
 allocator: std.mem.Allocator = undefined,
+renderer: Template = undefined,
 endpoint: zap.SimpleEndpoint = undefined,
 sessions: Sessions = undefined,
 
@@ -18,6 +20,7 @@ pub fn init(
 ) Self {
     return .{
         .allocator = a,
+        .renderer = Template.init(a),
         .sessions = Sessions.init(a),
         .endpoint = zap.SimpleEndpoint.init(.{
             .path = session_path,
@@ -28,6 +31,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *Self) void {
+    self.renderer.deinit();
     self.sessions.deinit();
 }
 
@@ -62,7 +66,7 @@ fn getSession(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     if (r.path) |path| {
         // /sessions
         if (path.len == e.settings.path.len) {
-            return self.listSessions(r);
+            return self.renderer.render(r, "web/templates/auth.html", .{}) catch return;
         }
         if (self.sessionIdFromPath(path)) |id| {
             if (self.sessions.get(id)) |session| {

@@ -113,14 +113,9 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
             self.allocator.free(self.settings.cookie_name);
         }
 
-        fn redirectLogin(self: *Self, r: *const zap.SimpleRequest) !void {
-            std.debug.print("redirect login: {s}\n", .{self.settings.success_url});
+        fn redirectSuccess(self: *Self, r: *const zap.SimpleRequest) !void {
+            std.debug.print("redirect success: {s}\n", .{self.settings.success_url});
             try r.redirectTo(self.settings.success_url, self.settings.redirect_code);
-        }
-
-        fn redirectLogout(self: *Self, r: *const zap.SimpleRequest) !void {
-            std.debug.print("redirect logout: {s}\n", .{self.settings.signin_url});
-            try r.redirectTo(self.settings.signin_url, self.settings.redirect_code);
         }
 
         fn redirectFailure(self: *Self, r: *const zap.SimpleRequest) !void {
@@ -274,22 +269,22 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
 
             // if we're requesting the login page, let the request through
             if (r.path) |p| {
-                std.debug.print("internal.authenticate: {s}\n", .{p});
-                if (eql(u8, p, s.signup_url) or eql(u8, p, s.signin_url)) {
-                    std.debug.print("internal.authenticateRequest: signin or signup page\n", .{});
-                    return .Handled;
-                }
+                if (r.method) |m| {
+                    std.debug.print("internal.authenticate: {s}.{s}\n", .{ m, p });
+                    if (eql(u8, m, "GET") and (eql(u8, p, s.signup_url) or eql(u8, p, s.signin_url))) {
+                        std.debug.print("internal.authenticateRequest: signin or signup page\n", .{});
+                        return .Handled;
+                    }
 
-                // parse body
-                r.parseBody() catch {
-                    // std.debug.print("warning: parseBody() failed in SessionAuth: {any}", .{err});
-                    // this is not an error in case of e.g. gets with querystrings
-                };
+                    // parse body
+                    r.parseBody() catch {
+                        // std.debug.print("warning: parseBody() failed in SessionAuth: {any}", .{err});
+                        // this is not an error in case of e.g. gets with querystrings
+                    };
 
-                if (r.method) |method| {
                     var isLogin = eql(u8, p, s.signin_callback);
                     var isRegister = eql(u8, p, s.signup_callback);
-                    if (std.mem.eql(u8, method, "POST") and (isLogin or isRegister)) {
+                    if (eql(u8, m, "POST") and (isLogin or isRegister)) {
                         std.debug.print("internal.authenticate: login:{} or register:{}\n", .{ isLogin, isRegister });
                         // get params of subject and password
                         if (r.getParamStr(self.settings.subject_param, self.allocator, false)) |maybe_subject| {
@@ -316,15 +311,15 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                                         }
                                         if (isLogin) {
                                             if (self.loginUser(r, subject.str, password.str)) {
-                                                self.redirectLogin(r) catch |err| {
+                                                self.redirectSuccess(r) catch |err| {
                                                     std.debug.print("internal.authenticate: redirect failed: {}\n", .{err});
                                                 };
+                                                std.debug.print("internal.authenticate: login success: {s}\n", .{subject.str});
+                                                return .Handled;
                                             } else {
-                                                self.redirectFailure(r) catch |err| {
-                                                    std.debug.print("internal.authenticate: redirect failed: {}\n", .{err});
-                                                };
-                                            }
-                                            return .Handled;
+                                                std.debug.print("internal.authenticate: login failure: {s}\n", .{subject.str});
+                                                return .AuthFailed;
+                                            } // else let session endpoint to render the page
                                         }
                                     }
                                 } else |err| {
@@ -336,13 +331,11 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                             std.debug.print("internal.authenticate: getParamStr(email) failed: {}", .{err});
                             return .AuthFailed;
                         }
-                    } else if (std.mem.eql(u8, method, "DELETE") and isLogin) {
+                    } else if (eql(u8, m, "DELETE") and isLogin) {
                         std.debug.print("internal.authenticate: logout\n", .{});
                         self.logout(r);
-                        self.redirectLogout(r) catch |err| {
-                            std.debug.print("internal.authenticate: redirect failed: {}\n", .{err});
-                        };
-                        return .Handled;
+                        // as soon as you log out you failed auth
+                        return .AuthFailed;
                     }
                 }
 
@@ -370,8 +363,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                 },
                 // auth failed -> redirect
                 .AuthFailed => {
-                    // we need to redirect and return .Handled
-                    std.debug.print("auth.authenticateRequest: NOT returning .AuthFailed\n", .{});
+                    // redirect to sigin page and return .Handled
                     self.redirectFailure(r) catch |err| {
                         std.debug.print("auth.authenticate: redirect failed: {}\n", .{err});
                     };
