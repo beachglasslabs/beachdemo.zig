@@ -48,7 +48,7 @@ pub fn create(self: *Self, userid: []const u8) ![]const u8 {
     }
 }
 
-pub fn delete(self: *Self, id: []const u8) bool {
+pub fn destroy(self: *Self, id: []const u8) bool {
     // We lock only on insertion, deletion, and listing
     self.lock.lock();
     defer self.lock.unlock();

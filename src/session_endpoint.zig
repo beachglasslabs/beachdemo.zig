@@ -36,7 +36,7 @@ pub fn get(self: *Self, id: []const u8) ?Session {
 }
 
 pub fn delete(self: *Self, id: []const u8) bool {
-    return self.sessions.delete(id);
+    return self.sessions.destroy(id);
 }
 
 pub fn post(self: *Self, userid: []const u8) ![]const u8 {

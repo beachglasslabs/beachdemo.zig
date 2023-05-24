@@ -97,10 +97,9 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
         }
 
         pub fn deinit(self: *Self) void {
-            var iter = self.session_tokens.iterator();
-            while (iter.next()) |kv| {
-                self.allocator.free(kv.key_ptr.*);
-                self.allocator.free(kv.value_ptr.*);
+            var iter = self.session_tokens.keyIterator();
+            while (iter.next()) |k| {
+                self.allocator.free(k.*);
             }
             self.session_tokens.deinit();
             self.allocator.free(self.settings.name_param);
@@ -379,7 +378,9 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
         }
 
         fn createAndStoreSessionToken(self: *Self, subject: []const u8, userid: []const u8) ![]const u8 {
+            // sessionid should not be freed as sessions will free it
             const sessionid = try self.sessions.post(userid);
+            // token should be freed
             const token = try self.createSessionToken(subject, sessionid);
             std.debug.print("create token={s}\n", .{token});
             if (!self.session_tokens.contains(token)) {
