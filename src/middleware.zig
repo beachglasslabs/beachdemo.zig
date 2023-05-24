@@ -4,6 +4,7 @@ const zap = @import("zap");
 /// Wrap multiple endpoints
 pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
     return struct {
+        allocator: std.mem.Allocator,
         endpoints: std.ArrayList(*zap.SimpleEndpoint),
         authenticator: *Authenticator,
         router: *Router,
@@ -14,6 +15,7 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
 
         pub fn init(a: std.mem.Allocator, router: *Router, authenticator: *Authenticator) Self {
             return .{
+                .allocator = a,
                 .authenticator = authenticator,
                 .endpoints = std.ArrayList(*zap.SimpleEndpoint).init(a),
                 .router = router,
@@ -30,7 +32,6 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
 
         pub fn deinit(self: *Self) void {
             self.endpoints.deinit();
-            self.fascade.deinit();
         }
 
         /// get the mega endpoint struct so we can be stored in the listener

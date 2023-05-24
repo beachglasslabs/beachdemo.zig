@@ -101,6 +101,7 @@ pub fn main() !void {
         // create authenticating endpoint
         const Dispatcher = Middleware.Middleware(Router.Router(User), Authenticator);
         var dispatcher = Dispatcher.init(allocator, &router, &authenticator);
+        defer dispatcher.deinit();
 
         // add endpoints
         try dispatcher.addEndpoint(user_endpoint.getEndpoint());
