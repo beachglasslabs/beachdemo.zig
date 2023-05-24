@@ -61,6 +61,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
         sessions: *SessionManager,
         settings: SessionAuthArgs,
 
+        token_lock: std.Thread.Mutex = .{},
         session_tokens: SessionTokenMap,
 
         const Self = @This();
@@ -220,6 +221,8 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                     std.debug.print("logout: removing cookie {s}\n", .{cookie.str});
                     defer cookie.deinit();
                     // if cookie is a valid session, remove it!
+                    self.token_lock.lock();
+                    defer self.token_lock.unlock();
                     if (self.session_tokens.fetchRemove(cookie.str)) |maybe_session| {
                         const token = maybe_session.key;
                         defer self.allocator.free(token);
@@ -242,6 +245,8 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                     defer cookie.deinit();
                     // locked or unlocked token lookup
                     std.debug.print("current.user: cookie {s}\n", .{cookie.str});
+                    self.token_lock.lock();
+                    defer self.token_lock.unlock();
                     if (self.session_tokens.contains(cookie.str)) {
                         // cookie is a valid session!
                         std.debug.print("current.user: COOKIE IS OK!!!: {s}\n", .{cookie.str});
@@ -389,6 +394,8 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
             // token should be freed
             const token = try self.createSessionToken(subject, sessionid);
             std.debug.print("create token={s}\n", .{token});
+            self.token_lock.lock();
+            defer self.token_lock.unlock();
             if (!self.session_tokens.contains(token)) {
                 std.debug.print("putting token={s}\n", .{token});
                 try self.session_tokens.put(try self.allocator.dupe(u8, token), sessionid);
