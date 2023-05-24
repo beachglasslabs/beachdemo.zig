@@ -8,7 +8,7 @@ const Users = @import("users.zig");
 
 pub const Self = @This();
 
-alloc: std.mem.Allocator = undefined,
+allocator: std.mem.Allocator = undefined,
 endpoint: zap.SimpleEndpoint = undefined,
 sessions: Sessions = undefined,
 
@@ -17,7 +17,7 @@ pub fn init(
     session_path: []const u8,
 ) Self {
     return .{
-        .alloc = a,
+        .allocator = a,
         .sessions = Sessions.init(a),
         .endpoint = zap.SimpleEndpoint.init(.{
             .path = session_path,
@@ -31,8 +31,16 @@ pub fn deinit(self: *Self) void {
     self.sessions.deinit();
 }
 
-pub fn getSessions(self: *Self) *Sessions {
-    return &self.sessions;
+pub fn get(self: *Self, id: []const u8) ?Session {
+    return self.sessions.get(id);
+}
+
+pub fn delete(self: *Self, id: []const u8) bool {
+    return self.sessions.delete(id);
+}
+
+pub fn post(self: *Self, userid: []const u8) ![]const u8 {
+    return self.sessions.create(userid);
 }
 
 pub fn getEndpoint(self: *Self) *zap.SimpleEndpoint {
@@ -56,20 +64,22 @@ fn getSession(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
         if (path.len == e.settings.path.len) {
             return self.listSessions(r);
         }
-        var jsonbuf: [256]u8 = undefined;
         if (self.sessionIdFromPath(path)) |id| {
             if (self.sessions.get(id)) |session| {
-                if (zap.stringifyBuf(&jsonbuf, session, .{})) |json| {
-                    r.sendJson(json) catch return;
-                }
+                const json = std.json.stringifyAlloc(self.allocator, session, .{}) catch return;
+                defer self.allocator.free(json);
+                r.sendJson(json) catch return;
+                return;
             }
         }
     }
+    r.setStatus(zap.StatusCode.not_found);
+    r.sendJson("") catch return;
 }
 
 fn listSessions(self: *Self, r: zap.SimpleRequest) void {
     if (self.sessions.toJSON()) |json| {
-        defer self.alloc.free(json);
+        defer self.allocator.free(json);
         r.sendJson(json) catch return;
     } else |err| {
         std.debug.print("LIST error: {}\n", .{err});
@@ -78,16 +88,12 @@ fn listSessions(self: *Self, r: zap.SimpleRequest) void {
 
 fn deleteSession(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     const self = @fieldParentPtr(Self, "endpoint", e);
-    std.debug.print("deleting session\n", .{});
+    std.debug.print("session: deleting\n", .{});
     if (r.path) |path| {
-        std.debug.print("deleting path {s}\n", .{path});
+        std.debug.print("session: deleting path {s}\n", .{path});
         if (self.sessionIdFromPath(path)) |id| {
-            if (self.sessions.delete(id)) {
-                return r.redirectTo("/auth", zap.StatusCode.see_other) catch return;
-            } else {
-                return r.redirectTo("/auth", zap.StatusCode.see_other) catch return;
-            }
+            _ = self.delete(id);
         }
     }
-    return r.redirectTo("/auth", zap.StatusCode.see_other) catch return;
+    return r.redirectTo(self.endpoint.settings.path, zap.StatusCode.see_other) catch return;
 }

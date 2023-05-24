@@ -7,7 +7,7 @@ const User = Users.User;
 
 pub const Self = @This();
 
-alloc: std.mem.Allocator = undefined,
+allocator: std.mem.Allocator = undefined,
 endpoint: zap.SimpleEndpoint = undefined,
 users: Users = undefined,
 
@@ -16,7 +16,7 @@ pub fn init(
     user_path: []const u8,
 ) Self {
     return .{
-        .alloc = a,
+        .allocator = a,
         .users = Users.init(a),
         .endpoint = zap.SimpleEndpoint.init(.{
             .path = user_path,
@@ -31,8 +31,26 @@ pub fn deinit(self: *Self) void {
     self.users.deinit();
 }
 
-pub fn getUsers(self: *Self) *Users {
-    return &self.users;
+pub fn getBySub(self: *Self, sub: []const u8) ?User {
+    return self.users.getByEmail(sub);
+}
+
+pub fn get(self: *Self, id: []const u8) ?User {
+    return self.users.getById(id);
+}
+
+pub const UserError = error{
+    InvalidEmailError,
+    InvalidPasswordError,
+    InvalidNameError,
+};
+
+pub fn post(self: *Self, name: ?[]const u8, email: ?[]const u8, password: ?[]const u8) ![]const u8 {
+    const username = name orelse return error.InvalidNameError;
+    const usermail = email orelse return error.InvalidEmailError;
+    const userpass = password orelse return error.InvalidPasswordError;
+
+    return self.users.add(username, usermail, userpass);
 }
 
 pub fn getEndpoint(self: *Self) *zap.SimpleEndpoint {
@@ -56,12 +74,11 @@ fn getUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
         if (path.len == e.settings.path.len) {
             return self.listUsers(r);
         }
-        var jsonbuf: [256]u8 = undefined;
         if (self.userIdFromPath(path)) |id| {
             if (self.users.getById(id)) |user| {
-                if (zap.stringifyBuf(&jsonbuf, user, .{})) |json| {
-                    r.sendJson(json) catch return;
-                }
+                const json = std.json.stringifyAlloc(self.allocator, user, .{}) catch return;
+                defer self.allocator.free(json);
+                r.sendJson(json) catch return;
             }
         }
     }
@@ -69,7 +86,7 @@ fn getUser(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
 
 fn listUsers(self: *Self, r: zap.SimpleRequest) void {
     if (self.users.toJSON()) |json| {
-        defer self.alloc.free(json);
+        defer self.allocator.free(json);
         r.sendJson(json) catch return;
     } else |err| {
         std.debug.print("LIST error: {}\n", .{err});

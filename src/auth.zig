@@ -124,7 +124,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                 // user exists already, log the user in
                 return false;
             } else {
-                _ = self.users.add(name, subject, password) catch |err| {
+                _ = self.users.post(name, subject, password) catch |err| {
                     std.debug.print("register.user: cannot add {s}: {}\n", .{ subject, err });
                 };
                 return true;
@@ -237,7 +237,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                         std.debug.print("current.user: COOKIE IS OK!!!: {s}\n", .{cookie.str});
                         const sessionid = self.sessionTokens.get(cookie.str) orelse return null;
                         const session = self.sessions.get(sessionid) orelse return null;
-                        var user = self.users.getById(session.userid) orelse return null;
+                        var user = self.users.get(session.userid) orelse return null;
                         std.debug.print("current.user: found {s}\n", .{user.name});
                         return user;
                     } else {
@@ -373,7 +373,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
         }
 
         fn createAndStoreSessionToken(self: *Self, subject: []const u8, userid: []const u8) ![]const u8 {
-            const sessionid = try self.sessions.create(userid);
+            const sessionid = try self.sessions.post(userid);
             const token = try self.createSessionToken(subject, sessionid);
             // put locked or not
             std.debug.print("create token={s}\n", .{token});

@@ -78,25 +78,18 @@ pub fn deinit(self: *Self) void {
 
 // the request will be freed (and its mem reused by facilio) when it's
 // completed, so we take copies of the names
-pub fn add(self: *Self, name: ?[]const u8, mail: ?[]const u8, pass: ?[]const u8) ![]const u8 {
+pub fn add(self: *Self, name: []const u8, mail: []const u8, pass: []const u8) ![]const u8 {
     var user: InternalUser = undefined;
     user.namelen = 0;
     user.maillen = 0;
 
-    // TODO return error when field is empty
-    if (name) |username| {
-        std.mem.copy(u8, user.namebuf[0..], username);
-        user.namelen = username.len;
-    }
+    std.mem.copy(u8, user.namebuf[0..], name);
+    user.namelen = name.len;
 
-    if (mail) |usermail| {
-        std.mem.copy(u8, user.mailbuf[0..], usermail);
-        user.maillen = usermail.len;
+    std.mem.copy(u8, user.mailbuf[0..], mail);
+    user.maillen = mail.len;
 
-        if (pass) |userpass| {
-            try hashPassword(&user.hashbuf, usermail, userpass);
-        }
-    }
+    try hashPassword(&user.hashbuf, mail, pass);
 
     // We lock only on insertion, deletion, and listing
     self.lock.lock();
@@ -131,10 +124,10 @@ pub fn delete(self: *Self, id: []const u8) bool {
     return self.users_by_email.remove(&user.mailbuf);
 }
 
-pub fn getBySub(self: *Self, sub: []const u8) ?User {
-    std.debug.print("getBySub {s}\n", .{sub});
+pub fn getByEmail(self: *Self, sub: []const u8) ?User {
+    std.debug.print("getByEmail{s}\n", .{sub});
     if (self.users_by_email.getPtr(sub)) |pUser| {
-        std.debug.print("getBySub found {s}\n", .{pUser.id});
+        std.debug.print("getByEmail found {s}\n", .{pUser.id});
         return getById(self, pUser.id);
     }
     return null;

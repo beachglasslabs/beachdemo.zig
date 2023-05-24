@@ -102,6 +102,30 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
                         return;
                     }
                     if (r.path) |p| {
+                        for (self.endpoints.items) |ep| {
+                            if (std.mem.startsWith(u8, p, ep.settings.path)) {
+                                std.debug.print("middleware.auth: dispatch to endpoint {s}\n", .{ep.settings.path});
+                                if (r.method) |m| {
+                                    if (std.mem.eql(u8, m, "GET")) {
+                                        const h = ep.settings.get orelse break;
+                                        return h(ep, r);
+                                    } else if (std.mem.eql(u8, m, "POST")) {
+                                        const h = ep.settings.post orelse break;
+                                        return h(ep, r);
+                                    } else if (std.mem.eql(u8, m, "PUT")) {
+                                        const h = ep.settings.put orelse break;
+                                        return h(ep, r);
+                                    } else if (std.mem.eql(u8, m, "DELETE")) {
+                                        const h = ep.settings.delete orelse break;
+                                        return h(ep, r);
+                                    } else if (std.mem.eql(u8, m, "PATCH")) {
+                                        const h = ep.settings.patch orelse break;
+                                        return h(ep, r);
+                                    }
+                                }
+                                break;
+                            }
+                        }
                         std.debug.print("middleware.handled: dispatch to no-context router {s}\n", .{p});
                         self.router.dispatch(r, null);
                     }

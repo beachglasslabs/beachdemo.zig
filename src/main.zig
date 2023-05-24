@@ -6,10 +6,7 @@ const MovieEndpoint = @import("movie_endpoint.zig");
 const Router = @import("router.zig");
 const Middleware = @import("middleware.zig");
 const UserSession = @import("auth.zig");
-const Users = @import("users.zig");
-const Sessions = @import("sessions.zig");
-const User = Users.User;
-const Session = Sessions.Session;
+const User = @import("users.zig").User;
 
 fn auth(router: *Router.Router(User), r: zap.SimpleRequest, _: ?User) void {
     std.debug.print("rendering auth\n", .{});
@@ -42,86 +39,95 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{
         .thread_safe = true,
     }){};
-    var allocator = gpa.allocator();
 
-    // setup routes
-    var router = try Router.Router(User).init(allocator);
-    defer router.deinit();
+    {
+        var allocator = gpa.allocator();
 
-    try router.get("/", index);
-    try router.get("/auth", auth);
-    try router.get("/profiles", profiles);
+        // setup routes
+        var router = try Router.Router(User).init(allocator);
+        defer router.deinit();
 
-    // setup listener
-    var listener = zap.SimpleEndpointListener.init(
-        allocator,
-        .{
-            .on_request = null,
-            .port = 3000,
-            .public_folder = "public",
-            .log = true,
-            .max_clients = 100000,
-            .max_body_size = 100 * 1024 * 1024,
-        },
-    );
-    defer listener.deinit();
+        try router.get("/", index);
+        try router.get("/auth", auth);
+        try router.get("/profiles", profiles);
 
-    var user_endpoint = UserEndpoint.init(allocator, "/users");
-    defer user_endpoint.deinit();
+        // setup listener
+        var listener = zap.SimpleEndpointListener.init(
+            allocator,
+            .{
+                .on_request = null,
+                .port = 3000,
+                .public_folder = "public",
+                .log = true,
+                .max_clients = 100000,
+                .max_body_size = 100 * 1024 * 1024,
+            },
+        );
+        defer listener.deinit();
 
-    var session_endpoint = SessionEndpoint.init(allocator, "/sessions");
-    defer session_endpoint.deinit();
+        var user_endpoint = UserEndpoint.init(allocator, "/users");
+        defer user_endpoint.deinit();
 
-    var movie_endpoint = try MovieEndpoint.init(allocator, "/movies", "web/movies.json");
-    defer movie_endpoint.deinit();
+        var session_endpoint = SessionEndpoint.init(allocator, "/sessions");
+        defer session_endpoint.deinit();
 
-    var movies = movie_endpoint.movies.movies;
-    var iter = movies.valueIterator();
-    while (iter.next()) |m| {
-        std.debug.print("got movie {s}\n", .{m.title});
+        var movie_endpoint = try MovieEndpoint.init(allocator, "/movies", "web/movies.json");
+        defer movie_endpoint.deinit();
+
+        var movies = movie_endpoint.movies.movies;
+        var iter = movies.valueIterator();
+        while (iter.next()) |m| {
+            std.debug.print("got movie {s}\n", .{m.title});
+        }
+
+        // create authenticator
+        const Authenticator = UserSession.SessionAuth(UserEndpoint, SessionEndpoint, User);
+        const auth_args = UserSession.SessionAuthArgs{
+            .name_param = "name",
+            .subject_param = "email",
+            .password_param = "password",
+            .signin_url = "/auth",
+            .signup_url = "/auth",
+            .success_url = "/profiles",
+            .signin_callback = "/sessions",
+            .signup_callback = "/users",
+            .cookie_name = "token",
+            .cookie_maxage = 1337,
+            .redirect_code = zap.StatusCode.see_other,
+        };
+        var authenticator = try Authenticator.init(allocator, &user_endpoint, &session_endpoint, auth_args);
+        defer authenticator.deinit();
+
+        // create authenticating endpoint
+        const Dispatcher = Middleware.Middleware(Router.Router(User), Authenticator);
+        var dispatcher = Dispatcher.init(allocator, &router, &authenticator);
+
+        // add endpoints
+        try dispatcher.addEndpoint(user_endpoint.getEndpoint());
+        try dispatcher.addEndpoint(session_endpoint.getEndpoint());
+        try dispatcher.addEndpoint(movie_endpoint.getEndpoint());
+        try listener.addEndpoint(dispatcher.getEndpoint());
+
+        // listen
+        try listener.listen();
+
+        std.debug.print("Listening on 0.0.0.0:3000\n", .{});
+
+        // start worker threads
+        zap.start(.{
+            .threads = 1,
+            // IMPORTANT! It is crucial to only have a single worker for this example to work!
+            // Multiple workers would have multiple copies of the users hashmap.
+            //
+            // Since zap is quite fast, you can do A LOT with a single worker.
+            // Try it with `zig build run-endpoint -Drelease-fast`
+            .workers = 1,
+        });
     }
 
-    // create authenticator
-    const Authenticator = UserSession.SessionAuth(Users, Sessions, User);
-    const auth_args = UserSession.SessionAuthArgs{
-        .name_param = "name",
-        .subject_param = "email",
-        .password_param = "password",
-        .signin_url = "/auth",
-        .signup_url = "/auth",
-        .success_url = "/profiles",
-        .signin_callback = "/sessions",
-        .signup_callback = "/users",
-        .cookie_name = "token",
-        .cookie_maxage = 1337,
-        .redirect_code = zap.StatusCode.see_other,
-    };
-    var authenticator = try Authenticator.init(allocator, &user_endpoint.users, &session_endpoint.sessions, auth_args);
-    defer authenticator.deinit();
-
-    // create authenticating endpoint
-    const Dispatcher = Middleware.Middleware(Router.Router(User), Authenticator);
-    var dispatcher = Dispatcher.init(allocator, &router, &authenticator);
-
-    // add endpoints
-    try dispatcher.addEndpoint(user_endpoint.getEndpoint());
-    try dispatcher.addEndpoint(session_endpoint.getEndpoint());
-    try dispatcher.addEndpoint(movie_endpoint.getEndpoint());
-    try listener.addEndpoint(dispatcher.getEndpoint());
-
-    // listen
-    try listener.listen();
-
-    std.debug.print("Listening on 0.0.0.0:3000\n", .{});
-
-    // start worker threads
-    zap.start(.{
-        .threads = 1,
-        // IMPORTANT! It is crucial to only have a single worker for this example to work!
-        // Multiple workers would have multiple copies of the users hashmap.
-        //
-        // Since zap is quite fast, you can do A LOT with a single worker.
-        // Try it with `zig build run-endpoint -Drelease-fast`
-        .workers = 1,
-    });
+    // all defers should have run by now
+    std.debug.print("\n\nSTOPPED!\n\n", .{});
+    // we'll arrive here after zap.stop()
+    const leaked = gpa.detectLeaks();
+    std.debug.print("Leaks detected: {}\n", .{leaked});
 }
