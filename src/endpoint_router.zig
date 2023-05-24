@@ -2,7 +2,7 @@ const std = @import("std");
 const zap = @import("zap");
 
 /// Wrap multiple endpoints
-pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
+pub fn EndpointRouter(comptime Router: type, comptime Authenticator: type) type {
     return struct {
         allocator: std.mem.Allocator,
         endpoints: std.ArrayList(*zap.SimpleEndpoint),
@@ -43,7 +43,7 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
 
         pub fn addEndpoint(self: *Self, ep: *zap.SimpleEndpoint) !void {
             for (self.endpoints.items) |other| {
-                std.debug.print("middleware: comparing {s} with {s}\n", .{ ep.settings.path, other.settings.path });
+                std.debug.print("endpoint.router: comparing {s} with {s}\n", .{ ep.settings.path, other.settings.path });
                 if (std.mem.startsWith(
                     u8,
                     other.settings.path,
@@ -56,23 +56,23 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
                     return zap.EndpointListenerError.EndpointPathShadowError;
                 }
             }
-            std.debug.print("middleware: adding endpoint {s}\n", .{ep.settings.path});
+            std.debug.print("endpoint.router: adding endpoint {s}\n", .{ep.settings.path});
             try self.endpoints.append(ep);
         }
 
         fn _internal_handleRequest(self: *Self, r: zap.SimpleRequest) void {
-            std.debug.print("middleware.handling\n", .{});
+            std.debug.print("endpoint.router.handling\n", .{});
             switch (self.authenticator.authenticateRequest(&r)) {
                 .AuthOK => {
-                    std.debug.print("middleware.authenticated\n", .{});
+                    std.debug.print("endpoint.router.authenticated\n", .{});
                     if (r.isFinished()) {
-                        std.debug.print("middleware: already processed\n", .{});
+                        std.debug.print("endpoint.router: already processed\n", .{});
                         return;
                     }
                     if (r.path) |p| {
                         for (self.endpoints.items) |ep| {
                             if (std.mem.startsWith(u8, p, ep.settings.path)) {
-                                std.debug.print("middleware.auth: dispatch to endpoint {s}\n", .{ep.settings.path});
+                                std.debug.print("endpoint.router.auth: dispatch to endpoint {s}\n", .{ep.settings.path});
                                 if (r.method) |m| {
                                     if (std.mem.eql(u8, m, "GET")) {
                                         const h = ep.settings.get orelse break;
@@ -94,23 +94,23 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
                                 break;
                             }
                         }
-                        std.debug.print("middleware.auth: dispatch to router {s}\n", .{p});
+                        std.debug.print("endpoint.router.auth: dispatch to router {s}\n", .{p});
                         var c = self.authenticator.getContext(&r);
                         self.router.dispatch(r, c);
                     }
                 },
                 .Handled => {
-                    std.debug.print("middleware.handled\n", .{});
+                    std.debug.print("endpoint.router.handled\n", .{});
                     if (r.isFinished()) {
-                        std.debug.print("middleware: already processed\n", .{});
+                        std.debug.print("endpoint.router: already processed\n", .{});
                         return;
                     }
                     if (r.path) |p| {
                         for (self.endpoints.items) |ep| {
                             if (std.mem.startsWith(u8, p, ep.settings.path)) {
-                                std.debug.print("middleware.auth: dispatch to endpoint {s}\n", .{ep.settings.path});
+                                std.debug.print("endpoint.router.auth: dispatch to endpoint {s}\n", .{ep.settings.path});
                                 if (r.method) |m| {
-                                    std.debug.print("middleware.auth: method {s}\n", .{m});
+                                    std.debug.print("endpoint.router.auth: method {s}\n", .{m});
                                     if (std.mem.eql(u8, m, "GET")) {
                                         const h = ep.settings.get orelse break;
                                         return h(ep, r);
@@ -131,7 +131,7 @@ pub fn Middleware(comptime Router: type, comptime Authenticator: type) type {
                                 break;
                             }
                         }
-                        std.debug.print("middleware.handled: dispatch to no-context router {s}\n", .{p});
+                        std.debug.print("endpoint.router.handled: dispatch to no-context router {s}\n", .{p});
                         self.router.dispatch(r, null);
                     }
                 },

@@ -4,8 +4,8 @@ const UserEndpoint = @import("user_endpoint.zig");
 const SessionEndpoint = @import("session_endpoint.zig");
 const MovieEndpoint = @import("movie_endpoint.zig");
 const Router = @import("router.zig");
-const Middleware = @import("middleware.zig");
-const UserSession = @import("auth.zig");
+const EndpointRouter = @import("endpoint_router.zig");
+const SessionManager = @import("session_manager.zig");
 const User = @import("users.zig").User;
 
 fn index(router: *Router.Router(User), r: zap.SimpleRequest, maybe_user: ?User) void {
@@ -75,8 +75,8 @@ pub fn main() !void {
         }
 
         // create authenticator
-        const Authenticator = UserSession.SessionAuth(UserEndpoint, SessionEndpoint, User);
-        const auth_args = UserSession.SessionAuthArgs{
+        const Authenticator = SessionManager.Authenticator(UserEndpoint, SessionEndpoint, User);
+        const auth_settings = SessionManager.AuthenticatorSettings{
             .name_param = "name",
             .subject_param = "email",
             .password_param = "password",
@@ -89,12 +89,12 @@ pub fn main() !void {
             .cookie_maxage = 1337,
             .redirect_code = zap.StatusCode.see_other,
         };
-        var authenticator = try Authenticator.init(allocator, &user_endpoint, &session_endpoint, auth_args);
+        var authenticator = try Authenticator.init(allocator, &user_endpoint, &session_endpoint, auth_settings);
         defer authenticator.deinit();
 
         // create authenticating endpoint
-        const Dispatcher = Middleware.Middleware(Router.Router(User), Authenticator);
-        var dispatcher = Dispatcher.init(allocator, &router, &authenticator);
+        const MainRouter = EndpointRouter.EndpointRouter(Router.Router(User), Authenticator);
+        var dispatcher = MainRouter.init(allocator, &router, &authenticator);
         defer dispatcher.deinit();
 
         // add endpoints

@@ -1,7 +1,7 @@
 const std = @import("std");
 const zap = @import("zap");
 
-pub const SessionAuthArgs = struct {
+pub const AuthenticatorSettings = struct {
     name_param: []const u8,
     subject_param: []const u8,
     password_param: []const u8,
@@ -17,7 +17,7 @@ pub const SessionAuthArgs = struct {
     redirect_code: zap.StatusCode = .found,
 };
 
-/// SessionAuth supports the following use case:
+/// Authenticator supports the following use case:
 ///
 /// - checks every request: is it going to the login page? -> let the request through.
 /// - else:
@@ -34,7 +34,7 @@ pub const SessionAuthArgs = struct {
 /// mechanisms described above will kick in. For that reason: please know what you're
 /// doing.
 ///
-/// See SessionAuthArgs:
+/// See AuthenticatorSettings:
 /// - subject & password param names can be defined by you
 /// - session cookie name and max-age can be defined by you
 /// - login page and redirect code (.302) can be defined by you
@@ -54,12 +54,12 @@ pub const SessionAuthArgs = struct {
 ///       -> another browser program with the page still open would still be able to use
 ///       -> the session. Which is kindof OK, but not as cool as erasing the token
 ///       -> on the server side which immediately block all other browsers as well.
-pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, comptime User: type) type {
+pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, comptime User: type) type {
     return struct {
         allocator: std.mem.Allocator,
         users: *UserManager,
         sessions: *SessionManager,
-        settings: SessionAuthArgs,
+        settings: AuthenticatorSettings,
 
         token_lock: std.Thread.Mutex = .{},
         session_tokens: SessionTokenMap,
@@ -74,24 +74,24 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
             allocator: std.mem.Allocator,
             users: *UserManager,
             sessions: *SessionManager,
-            args: SessionAuthArgs,
+            settings: AuthenticatorSettings,
         ) !Self {
             return .{
                 .allocator = allocator,
                 .users = users,
                 .sessions = sessions,
                 .settings = .{
-                    .name_param = try allocator.dupe(u8, args.name_param),
-                    .subject_param = try allocator.dupe(u8, args.subject_param),
-                    .password_param = try allocator.dupe(u8, args.password_param),
-                    .signin_url = try allocator.dupe(u8, args.signin_url),
-                    .signup_url = try allocator.dupe(u8, args.signup_url),
-                    .success_url = try allocator.dupe(u8, args.success_url),
-                    .signin_callback = try allocator.dupe(u8, args.signin_callback),
-                    .signup_callback = try allocator.dupe(u8, args.signup_callback),
-                    .cookie_name = try allocator.dupe(u8, args.cookie_name),
-                    .cookie_maxage = args.cookie_maxage,
-                    .redirect_code = args.redirect_code,
+                    .name_param = try allocator.dupe(u8, settings.name_param),
+                    .subject_param = try allocator.dupe(u8, settings.subject_param),
+                    .password_param = try allocator.dupe(u8, settings.password_param),
+                    .signin_url = try allocator.dupe(u8, settings.signin_url),
+                    .signup_url = try allocator.dupe(u8, settings.signup_url),
+                    .success_url = try allocator.dupe(u8, settings.success_url),
+                    .signin_callback = try allocator.dupe(u8, settings.signin_callback),
+                    .signup_callback = try allocator.dupe(u8, settings.signup_callback),
+                    .cookie_name = try allocator.dupe(u8, settings.cookie_name),
+                    .cookie_maxage = settings.cookie_maxage,
+                    .redirect_code = settings.redirect_code,
                 },
                 .session_tokens = SessionTokenMap.init(allocator),
             };
@@ -283,7 +283,7 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
 
                     // parse body
                     r.parseBody() catch {
-                        // std.debug.print("warning: parseBody() failed in SessionAuth: {any}", .{err});
+                        // std.debug.print("warning: parseBody() failed in Authenticator: {any}", .{err});
                         // this is not an error in case of e.g. gets with querystrings
                     };
 
