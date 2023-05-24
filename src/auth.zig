@@ -146,21 +146,23 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                     // create session token
                     std.debug.print("login.user: password matches for {s} {s}\n", .{ user.email, user.id });
 
-                    const token = self.createAndStoreSessionToken(subject, user.id) catch |err| {
+                    if (self.createAndStoreSessionToken(subject, user.id)) |token| {
+                        std.debug.print("login.user: session creation: {s}\n", .{token});
+                        defer self.allocator.free(token);
+                        // now set the cookie header
+                        r.setCookie(.{
+                            .name = self.settings.cookie_name,
+                            .value = token,
+                            .max_age_s = self.settings.cookie_maxage,
+                        }) catch |err| {
+                            std.debug.print("login.user: cookie setting failed: {}\n", .{err});
+                        };
+                        // errors with token don't mean the auth itself wasn't OK
+                        return true;
+                    } else |err| {
                         std.debug.print("login.user: session creation failed: {}\n", .{err});
                         return false;
-                    };
-                    defer self.allocator.free(token);
-                    // now set the cookie header
-                    r.setCookie(.{
-                        .name = self.settings.cookie_name,
-                        .value = token,
-                        .max_age_s = self.settings.cookie_maxage,
-                    }) catch |err| {
-                        std.debug.print("login.user: cookie setting failed: {}\n", .{err});
-                    };
-                    // errors with token don't mean the auth itself wasn't OK
-                    return true;
+                    }
                 } else {
                     std.debug.print("login.user: password didn't match\n", .{});
                 }
@@ -219,6 +221,8 @@ pub fn SessionAuth(comptime UserManager: type, comptime SessionManager: type, co
                     defer cookie.deinit();
                     // if cookie is a valid session, remove it!
                     if (self.session_tokens.fetchRemove(cookie.str)) |maybe_session| {
+                        const token = maybe_session.key;
+                        defer self.allocator.free(token);
                         const sessionid = maybe_session.value;
                         std.debug.print("logout: removing session id {s}\n", .{sessionid});
                         _ = self.sessions.delete(sessionid);
