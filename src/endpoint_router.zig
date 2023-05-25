@@ -2,23 +2,21 @@ const std = @import("std");
 const zap = @import("zap");
 
 /// Wrap multiple endpoints
-pub fn EndpointRouter(comptime Router: type, comptime Authenticator: type) type {
+pub fn EndpointRouter(comptime Authenticator: type) type {
     return struct {
         allocator: std.mem.Allocator,
         endpoints: std.ArrayList(*zap.SimpleEndpoint),
         authenticator: *Authenticator,
-        router: *Router,
         fascade: zap.SimpleEndpoint,
 
         pub const RequestFn = *const fn (*zap.SimpleEndpoint, zap.SimpleRequest) void;
         const Self = @This();
 
-        pub fn init(a: std.mem.Allocator, router: *Router, authenticator: *Authenticator) Self {
+        pub fn init(a: std.mem.Allocator, authenticator: *Authenticator) Self {
             return .{
                 .allocator = a,
                 .authenticator = authenticator,
                 .endpoints = std.ArrayList(*zap.SimpleEndpoint).init(a),
-                .router = router,
                 .fascade = zap.SimpleEndpoint.init(.{
                     .path = "/", // we do everything
                     .get = handleRequest,
@@ -94,9 +92,6 @@ pub fn EndpointRouter(comptime Router: type, comptime Authenticator: type) type 
                                 break;
                             }
                         }
-                        std.debug.print("endpoint.router.auth: dispatch to router {s}\n", .{p});
-                        var c = self.authenticator.getContext(&r);
-                        self.router.dispatch(r, c);
                     }
                 },
                 .Handled => {
@@ -131,8 +126,6 @@ pub fn EndpointRouter(comptime Router: type, comptime Authenticator: type) type 
                                 break;
                             }
                         }
-                        std.debug.print("endpoint.router.handled: dispatch to no-context router {s}\n", .{p});
-                        self.router.dispatch(r, null);
                     }
                 },
                 .AuthFailed => unreachable,

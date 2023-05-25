@@ -2,22 +2,30 @@ const std = @import("std");
 const zap = @import("zap");
 const Template = @import("template.zig");
 
-pub fn Router(comptime ContextType: anytype) type {
+pub fn Router(comptime Context: anytype) type {
     return struct {
-        allocator: std.mem.Allocator = undefined,
         renderer: Template = undefined,
+        endpoint: zap.SimpleEndpoint = undefined,
         gets: std.StringHashMap(RequestFn) = undefined,
         puts: std.StringHashMap(RequestFn) = undefined,
         posts: std.StringHashMap(RequestFn) = undefined,
         deletes: std.StringHashMap(RequestFn) = undefined,
         patches: std.StringHashMap(RequestFn) = undefined,
 
-        pub const RequestFn = *const fn (*Self, zap.SimpleRequest, ?ContextType) void;
+        pub const RequestFn = *const fn (Template, zap.SimpleRequest, *Context) bool;
+
         const Self = @This();
 
         pub fn init(allocator: std.mem.Allocator) !Self {
             return .{
-                .allocator = allocator,
+                .endpoint = zap.SimpleEndpoint.init(.{
+                    .path = "/", // doesn't matter
+                    .get = handleRequest,
+                    .post = handleRequest,
+                    .put = handleRequest,
+                    .delete = handleRequest,
+                    .patch = handleRequest,
+                }),
                 .renderer = Template.init(allocator),
                 .gets = std.StringHashMap(RequestFn).init(allocator),
                 .posts = std.StringHashMap(RequestFn).init(allocator),
@@ -34,6 +42,10 @@ pub fn Router(comptime ContextType: anytype) type {
             self.puts.deinit();
             self.deletes.deinit();
             self.patches.deinit();
+        }
+
+        pub fn getEndpoint(self: *Self) *zap.SimpleEndpoint {
+            return &self.endpoint;
         }
 
         pub fn get(self: *Self, path: []const u8, handler: RequestFn) !void {
@@ -56,8 +68,15 @@ pub fn Router(comptime ContextType: anytype) type {
             try self.patches.put(path, handler);
         }
 
-        pub fn dispatch(self: *Self, r: zap.SimpleRequest, c: ?ContextType) void {
+        pub fn handleRequest(ep: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
+            _ = dispatch(ep, r);
+        }
+
+        pub fn dispatch(ep: *zap.SimpleEndpoint, r: zap.SimpleRequest) bool {
+            var self = @fieldParentPtr(Self, "endpoint", ep);
+
             std.debug.print("in dispatch:\n", .{});
+
             if (r.query) |query| {
                 std.debug.print("QUERY: {s}\n", .{query});
             }
@@ -66,25 +85,29 @@ pub fn Router(comptime ContextType: anytype) type {
                 std.debug.print("PATH: {s}\n", .{path});
                 if (r.method) |method| {
                     std.debug.print("METHOD: {s}\n", .{method});
-                    if (std.mem.eql(u8, method, "GET")) {
-                        if (self.gets.get(path)) |handler| {
-                            return handler(self, r, c);
-                        }
-                    } else if (std.mem.eql(u8, method, "POST")) {
-                        if (self.posts.get(path)) |handler| {
-                            return handler(self, r, c);
-                        }
-                    } else if (std.mem.eql(u8, method, "PUT")) {
-                        if (self.puts.get(path)) |handler| {
-                            return handler(self, r, c);
-                        }
-                    } else if (std.mem.eql(u8, method, "DELETE")) {
-                        if (self.deletes.get(path)) |handler| {
-                            return handler(self, r, c);
-                        }
-                    } else if (std.mem.eql(u8, method, "PATCH")) {
-                        if (self.patches.get(path)) |handler| {
-                            return handler(self, r, c);
+
+                    const maybe_context: ?*Context = r.getUserContext(Context);
+                    if (maybe_context) |c| {
+                        if (std.mem.eql(u8, method, "GET")) {
+                            if (self.gets.get(path)) |handler| {
+                                return handler(self.renderer, r, c);
+                            }
+                        } else if (std.mem.eql(u8, method, "POST")) {
+                            if (self.posts.get(path)) |handler| {
+                                return handler(self.renderer, r, c);
+                            }
+                        } else if (std.mem.eql(u8, method, "PUT")) {
+                            if (self.puts.get(path)) |handler| {
+                                return handler(self.renderer, r, c);
+                            }
+                        } else if (std.mem.eql(u8, method, "DELETE")) {
+                            if (self.deletes.get(path)) |handler| {
+                                return handler(self.renderer, r, c);
+                            }
+                        } else if (std.mem.eql(u8, method, "PATCH")) {
+                            if (self.patches.get(path)) |handler| {
+                                return handler(self.renderer, r, c);
+                            }
                         }
                     }
                 }
@@ -92,7 +115,8 @@ pub fn Router(comptime ContextType: anytype) type {
 
             std.debug.print("in dispatch: 404 now\n", .{});
             r.setStatus(zap.StatusCode.not_found);
-            r.sendBody("") catch return;
+            r.sendBody("") catch return true;
+            return true;
         }
 
         pub fn renderTemplate(self: *Self, r: zap.SimpleRequest, t: []const u8, m: anytype) !void {

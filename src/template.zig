@@ -13,7 +13,7 @@ pub fn init(allocator: std.mem.Allocator) Self {
 
 pub fn deinit(_: *Self) void {}
 
-pub fn render(self: *Self, r: zap.SimpleRequest, t: []const u8, m: anytype) !void {
+pub fn render(self: *const Self, r: zap.SimpleRequest, t: []const u8, m: anytype) !void {
     const file = try std.fs.cwd().openFile(
         t,
         .{},

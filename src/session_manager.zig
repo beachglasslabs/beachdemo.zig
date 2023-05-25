@@ -54,7 +54,7 @@ pub const AuthenticatorSettings = struct {
 ///       -> another browser program with the page still open would still be able to use
 ///       -> the session. Which is kindof OK, but not as cool as erasing the token
 ///       -> on the server side which immediately block all other browsers as well.
-pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, comptime User: type) type {
+pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, comptime Context: type) type {
     return struct {
         allocator: std.mem.Allocator,
         users: *UserManager,
@@ -185,6 +185,17 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                     if (self.session_tokens.contains(cookie.str)) {
                         // cookie is a valid session!
                         std.debug.print("login.session: COOKIE IS OK!!!: {s}\n", .{cookie.str});
+                        // cookie is a valid session!
+                        const sessionid = self.session_tokens.get(cookie.str) orelse return true;
+                        const session = self.sessions.get(sessionid) orelse return true;
+                        var user = self.users.get(session.userid) orelse return true;
+                        std.debug.print("current.user: found {s}\n", .{user.name});
+                        if (r.getUserContext(Context)) |c| {
+                            c.user = user;
+                            r.setUserContext(c);
+                        } else {
+                            std.debug.print("current.user: woops no context\n", .{});
+                        }
                         return true;
                     } else {
                         std.debug.print("login.session: COOKIE IS BAD!!!: {s}\n", .{cookie.str});
@@ -234,38 +245,6 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
             } else |err| {
                 std.debug.print("unreachable: logout: {any}", .{err});
             }
-        }
-
-        // return User if successful, null otherwise
-        // r.parseCookie(false) must have been called before calling this
-        pub fn getContext(self: *Self, r: *const zap.SimpleRequest) ?User {
-            // check for session cookie
-            if (r.getCookieStr(self.settings.cookie_name, self.allocator, false)) |maybe_cookie| {
-                if (maybe_cookie) |cookie| {
-                    defer cookie.deinit();
-                    // locked or unlocked token lookup
-                    std.debug.print("current.user: cookie {s}\n", .{cookie.str});
-                    self.token_lock.lock();
-                    defer self.token_lock.unlock();
-                    if (self.session_tokens.contains(cookie.str)) {
-                        // cookie is a valid session!
-                        std.debug.print("current.user: COOKIE IS OK!!!: {s}\n", .{cookie.str});
-                        const sessionid = self.session_tokens.get(cookie.str) orelse return null;
-                        const session = self.sessions.get(sessionid) orelse return null;
-                        var user = self.users.get(session.userid) orelse return null;
-                        std.debug.print("current.user: found {s}\n", .{user.name});
-                        return user;
-                    } else {
-                        std.debug.print("current.user: COOKIE IS BAD!!!: {s}\n", .{cookie.str});
-                    }
-                } else {
-                    std.debug.print("current.user: no {s} cookie found\n", .{self.settings.cookie_name});
-                }
-            } else |err| {
-                std.debug.print("unreachable: could not check for cookie in current.user: {}\n", .{err});
-            }
-
-            return null;
         }
 
         fn _internal_authenticate(self: *Self, r: *const zap.SimpleRequest) zap.AuthResult {
