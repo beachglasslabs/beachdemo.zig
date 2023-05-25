@@ -224,6 +224,11 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                 std.debug.print("logout: cookie setting failed: {}\n", .{err});
             }
 
+            if (r.getUserContext(Context)) |c| {
+                c.user = null;
+                r.setUserContext(c);
+            }
+
             r.parseCookies(false);
 
             // check for session cookie
