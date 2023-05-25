@@ -98,6 +98,7 @@ pub fn UserEndpoint(comptime MovieManager: type, comptime Context: anytype) type
                 } else if (std.mem.eql(u8, path, prefix)) {
                     if (r.getUserContext(Context)) |c| {
                         if (c.user) |user| {
+                            std.debug.print("favorites.get: user {s}\n", .{user.id});
                             const fav = self.users.getFavorites(user.id);
                             const json = std.json.stringifyAlloc(self.allocator, fav, .{}) catch return;
                             defer self.allocator.free(json);
@@ -131,9 +132,17 @@ pub fn UserEndpoint(comptime MovieManager: type, comptime Context: anytype) type
                                 if (maybe_movie) |movie| {
                                     if (r.method) |method| {
                                         if (std.mem.eql(u8, method, "POST")) {
-                                            self.users.addFavorite(user.id, movie);
+                                            const fav = self.users.addFavorite(user.id, movie);
+                                            const json = std.json.stringifyAlloc(self.allocator, fav, .{}) catch return;
+                                            defer self.allocator.free(json);
+                                            r.sendJson(json) catch return;
+                                            return;
                                         } else if (std.mem.eql(u8, method, "DELETE")) {
-                                            self.users.removeFavorite(user.id, movie);
+                                            const fav = self.users.removeFavorite(user.id, movie);
+                                            const json = std.json.stringifyAlloc(self.allocator, fav, .{}) catch return;
+                                            defer self.allocator.free(json);
+                                            r.sendJson(json) catch return;
+                                            return;
                                         }
                                     }
                                 }

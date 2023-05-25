@@ -153,40 +153,49 @@ pub fn getFavorites(self: *Self, id: []const u8) []Movie {
     // we don't care about locking here, as our usage-pattern is unlikely to
     // get a user by id that is not known yet
     if (self.users_by_id.getPtr(id)) |pUser| {
-        std.debug.print("getFavorites found {s}\n", .{pUser.id});
+        std.debug.print("favorites.get: user {s}\n", .{pUser.id});
         return pUser.favorites.items;
     } else {
-        std.debug.print("getFavorites cannot find {s}\n", .{id});
+        std.debug.print("favorites.get: no such user {s}\n", .{id});
     }
     return &.{};
 }
 
-pub fn addFavorite(self: *Self, id: []const u8, movie: Movie) void {
+pub fn addFavorite(self: *Self, id: []const u8, movie: Movie) []Movie {
     if (self.users_by_id.getPtr(id)) |pUser| {
-        std.debug.print("getFavorites found {s}\n", .{pUser.id});
+        std.debug.print("favorites.add: user {s}\n", .{pUser.id});
+        var exist = false;
         for (pUser.favorites.items) |m| {
             if (std.mem.eql(u8, m.id, movie.id)) {
-                return;
+                exist = true;
             }
         }
-        pUser.favorites.append(movie) catch return;
+        std.debug.print("favorites.add: movie {s}\n", .{movie.id});
+        if (!exist) {
+            pUser.favorites.append(movie) catch {};
+        }
+        return pUser.favorites.items;
     } else {
-        std.debug.print("getFavorites cannot find {s}\n", .{id});
+        std.debug.print("favorites.add: no such user {s}\n", .{id});
     }
+    return &.{};
 }
 
-pub fn removeFavorite(self: *Self, id: []const u8, movie: Movie) void {
+pub fn removeFavorite(self: *Self, id: []const u8, movie: Movie) []Movie {
     if (self.users_by_id.getPtr(id)) |pUser| {
-        std.debug.print("getFavorites found {s}\n", .{pUser.id});
+        std.debug.print("favorites.remove: user {s}\n", .{pUser.id});
         for (pUser.favorites.items, 0..) |m, i| {
             if (std.mem.eql(u8, m.id, movie.id)) {
+                std.debug.print("favorites.remove: moive {s}\n", .{movie.id});
                 _ = pUser.favorites.swapRemove(i);
-                return;
+                break;
             }
         }
+        return pUser.favorites.items;
     } else {
-        std.debug.print("getFavorites cannot find {s}\n", .{id});
+        std.debug.print("favorites.remove: no such user {s}\n", .{id});
     }
+    return &.{};
 }
 
 pub fn getById(self: *Self, id: []const u8) ?User {
