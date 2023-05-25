@@ -49,16 +49,16 @@
             </div>
             <button type="submit" class="bg-sky-600 py-3 text-white rounded-md w-full mt-10 hover:bg-sky-700 transition" x-text="login ? 'Sign in' : 'Join us'"></button>
             <div class="flex flex-row items-center gap-4 mt-8 justify-center">
-              <div @click="location.href='/oauth2/google'" class="w-10 h-10 bg-white rounded-full flex items-center justify-center cursor-pointer hover:opacity-80 transition">
+              <div @click="location.href='/oauth2/google/redirect'" class="w-10 h-10 bg-white rounded-full flex items-center justify-center cursor-pointer hover:opacity-80 transition">
                 <img src="/img/fcgoogle.svg" alt="Google">
               </div>
-              <div @click="location.href='/oauth2/github'" class="w-10 h-10 bg-white rounded-full flex items-center justify-center cursor-pointer hover:opacity-80 transition">
+              <div @click="location.href='/oauth2/github/redirect'" class="w-10 h-10 bg-white rounded-full flex items-center justify-center cursor-pointer hover:opacity-80 transition">
                 <img src="/img/fagithub.svg" alt="Github">
               </div>
             </div>
             <p class="text-neutral-500 mt-12">
               <span x-text="login ? 'First time using Beachglass?' : 'Already have an account?'"></span>
-              <span @click="login = ! login" class="text-white ml-1 hover:underline cursor-pointer" x-text="login ? 'Create an account' : 'Login'"></span>.
+              <span @click="login = ! login" class="text-white ml-1 hover:underline cursor-pointer" x-text="login ? 'Join us' : 'Sign in'"></span>.
             </p>
             <p x-text="message" x-show="message !== ''" class="text-white mt-12"></p>
           </form>

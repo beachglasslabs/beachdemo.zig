@@ -78,8 +78,8 @@ pub fn deinit(self: *Self) void {
     self.users_by_email.deinit();
     var iter = self.users_by_id.valueIterator();
     while (iter.next()) |user| {
-        defer user.favorites.deinit();
-        defer self.allocator.free(user.id);
+        user.favorites.deinit();
+        self.allocator.free(user.id);
     }
     self.users_by_id.deinit();
 }
