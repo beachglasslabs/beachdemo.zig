@@ -64,7 +64,6 @@ pub fn main() !void {
         defer router.deinit();
 
         try router.get("/", index);
-        //try router.get("/profiles", profiles);
 
         var htmlHandler = zap.Middleware.EndpointHandler(Handler, Context).init(
             router.getEndpoint(),
@@ -72,18 +71,18 @@ pub fn main() !void {
             true,
         );
 
-        const UserManager = UserEndpoint.UserEndpoint(Context);
-        var user_endpoint = UserManager.init(allocator, "/users");
-        defer user_endpoint.deinit();
+        var movie_endpoint = try MovieEndpoint.init(allocator, "/movies", "web/movies.json");
+        defer movie_endpoint.deinit();
 
         var session_endpoint = SessionEndpoint.init(allocator, "/sessions");
         defer session_endpoint.deinit();
 
-        var movie_endpoint = try MovieEndpoint.init(allocator, "/movies", "web/movies.json");
-        defer movie_endpoint.deinit();
+        const UserManager = UserEndpoint.UserEndpoint(MovieEndpoint, Context);
+        var user_endpoint = UserManager.init(allocator, "/users", &movie_endpoint);
+        defer user_endpoint.deinit();
 
         // create authenticator
-        const Authenticator = SessionManager.Authenticator(UserEndpoint.UserEndpoint(Context), SessionEndpoint, Context);
+        const Authenticator = SessionManager.Authenticator(UserEndpoint.UserEndpoint(MovieEndpoint, Context), SessionEndpoint, Context);
         const auth_settings = SessionManager.AuthenticatorSettings{
             .name_param = "name",
             .subject_param = "email",

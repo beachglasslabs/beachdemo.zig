@@ -1,5 +1,7 @@
 const std = @import("std");
 const uuid = @import("uuid.zig");
+const Movies = @import("movies.zig");
+const Movie = Movies.Movie;
 
 allocator: std.mem.Allocator = undefined,
 users_by_id: std.StringHashMap(InternalUser) = undefined,
@@ -21,6 +23,7 @@ const InternalUser = struct {
     hashbuf: [Hash.digest_length * 2]u8 = undefined,
     saltbuf: [16]u8 = undefined,
     avatar: []const u8 = undefined,
+    favorites: std.ArrayList(Movie) = undefined,
 };
 
 pub const User = struct {
@@ -75,6 +78,7 @@ pub fn deinit(self: *Self) void {
     self.users_by_email.deinit();
     var iter = self.users_by_id.valueIterator();
     while (iter.next()) |user| {
+        defer user.favorites.deinit();
         defer self.allocator.free(user.id);
     }
     self.users_by_id.deinit();
@@ -106,8 +110,8 @@ pub fn add(self: *Self, name: []const u8, mail: []const u8, pass: []const u8) ![
     );
 
     user.id = try std.fmt.allocPrint(self.allocator, "{s}", .{uuid.newV4()});
-
     user.avatar = newAvatarImage();
+    user.favorites = std.ArrayList(Movie).init(self.allocator);
     if (self.users_by_id.put(user.id, user)) {
         var newUser = self.getById(user.id).?;
         std.debug.print("adding user: {s} as {s}\n", .{ newUser.email, newUser.id });
@@ -143,6 +147,46 @@ pub fn getByEmail(self: *Self, sub: []const u8) ?User {
         return getById(self, pUser.id);
     }
     return null;
+}
+
+pub fn getFavorites(self: *Self, id: []const u8) []Movie {
+    // we don't care about locking here, as our usage-pattern is unlikely to
+    // get a user by id that is not known yet
+    if (self.users_by_id.getPtr(id)) |pUser| {
+        std.debug.print("getFavorites found {s}\n", .{pUser.id});
+        return pUser.favorites.items;
+    } else {
+        std.debug.print("getFavorites cannot find {s}\n", .{id});
+    }
+    return &.{};
+}
+
+pub fn addFavorite(self: *Self, id: []const u8, movie: Movie) void {
+    if (self.users_by_id.getPtr(id)) |pUser| {
+        std.debug.print("getFavorites found {s}\n", .{pUser.id});
+        for (pUser.favorites.items) |m| {
+            if (std.mem.eql(u8, m.id, movie.id)) {
+                return;
+            }
+        }
+        pUser.favorites.append(movie) catch return;
+    } else {
+        std.debug.print("getFavorites cannot find {s}\n", .{id});
+    }
+}
+
+pub fn removeFavorite(self: *Self, id: []const u8, movie: Movie) void {
+    if (self.users_by_id.getPtr(id)) |pUser| {
+        std.debug.print("getFavorites found {s}\n", .{pUser.id});
+        for (pUser.favorites.items, 0..) |m, i| {
+            if (std.mem.eql(u8, m.id, movie.id)) {
+                _ = pUser.favorites.swapRemove(i);
+                return;
+            }
+        }
+    } else {
+        std.debug.print("getFavorites cannot find {s}\n", .{id});
+    }
 }
 
 pub fn getById(self: *Self, id: []const u8) ?User {

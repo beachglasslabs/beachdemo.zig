@@ -52,6 +52,10 @@ fn movieIdFromPath(self: *Self, path: []const u8) ?[]const u8 {
     return null;
 }
 
+pub fn get(self: *Self, id: []const u8) ?Movie {
+    return self.movies.get(id);
+}
+
 fn getMovie(e: *zap.SimpleEndpoint, r: zap.SimpleRequest) void {
     const self = @fieldParentPtr(Self, "endpoint", e);
     if (r.path) |path| {

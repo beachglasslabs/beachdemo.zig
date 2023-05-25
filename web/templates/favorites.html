@@ -24,22 +24,22 @@
               Alpine.data('favoritelist', () => ({
                       favorites: [],
                       async init() {
-                              this.favorites = await (await fetch('/movies/favorites')).json()
+                              this.favorites = await (await fetch('/users/favorites')).json()
                             },
                       isFavorite(movie) {
                               return this.favorites.map(x => x.id).includes(movie.id)
                             },
                       async addFavorite(movie) {
                               if (!this.isFavorite(movie)) {
-                                      await (await fetch('/favorites/' + movie.id, {method: 'POST'})).json()
+                                      await (await fetch('/users/favorites/' + movie.id, {method: 'POST'})).json()
                                     }
-                              this.favorites = await (await fetch('/movies/favorites')).json()
+                              this.favorites = await (await fetch('/users/favorites')).json()
                             },
                       async removeFavorite(movie) {
                               if (this.isFavorite(movie)) {
-                                      await (await fetch('/favorites/' + movie.id, {method: 'DELETE'})).json()
+                                      await (await fetch('/users/favorites/' + movie.id, {method: 'DELETE'})).json()
                                     }
-                              this.favorites = await (await fetch('/movies/favorites')).json()
+                              this.favorites = await (await fetch('/users/favorites')).json()
                             },
                     }),
                     )
