@@ -46,17 +46,6 @@ fn index(renderer: Template, r: zap.SimpleRequest, context: *Context) bool {
     return true;
 }
 
-fn profiles(renderer: Template, r: zap.SimpleRequest, context: *Context) bool {
-    if (context.user) |user| {
-        std.debug.print("profiles: user is {s}\n", .{user.name});
-        renderer.render(r, "web/templates/profiles.html", .{ .name = user.name, .avatar = user.avatar }) catch return true;
-    } else {
-        std.debug.print("profiles: user is null\n", .{});
-        redirect(r);
-    }
-    return true;
-}
-
 fn redirect(r: zap.SimpleRequest) void {
     r.redirectTo("/sessions", zap.StatusCode.see_other) catch return;
 }
@@ -75,7 +64,7 @@ pub fn main() !void {
         defer router.deinit();
 
         try router.get("/", index);
-        try router.get("/profiles", profiles);
+        //try router.get("/profiles", profiles);
 
         var htmlHandler = zap.Middleware.EndpointHandler(Handler, Context).init(
             router.getEndpoint(),
@@ -83,7 +72,8 @@ pub fn main() !void {
             true,
         );
 
-        var user_endpoint = UserEndpoint.init(allocator, "/users");
+        const UserManager = UserEndpoint.UserEndpoint(Context);
+        var user_endpoint = UserManager.init(allocator, "/users");
         defer user_endpoint.deinit();
 
         var session_endpoint = SessionEndpoint.init(allocator, "/sessions");
@@ -93,14 +83,14 @@ pub fn main() !void {
         defer movie_endpoint.deinit();
 
         // create authenticator
-        const Authenticator = SessionManager.Authenticator(UserEndpoint, SessionEndpoint, Context);
+        const Authenticator = SessionManager.Authenticator(UserEndpoint.UserEndpoint(Context), SessionEndpoint, Context);
         const auth_settings = SessionManager.AuthenticatorSettings{
             .name_param = "name",
             .subject_param = "email",
             .password_param = "password",
             .signin_url = "/sessions",
             .signup_url = "/sessions",
-            .success_url = "/profiles",
+            .success_url = "/users",
             .signin_callback = "/sessions",
             .signup_callback = "/users",
             .cookie_name = "token",
