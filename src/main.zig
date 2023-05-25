@@ -5,7 +5,7 @@ const SessionEndpoint = @import("session_endpoint.zig");
 const MovieEndpoint = @import("movie_endpoint.zig");
 const Router = @import("router.zig");
 const EndpointRouter = @import("endpoint_router.zig");
-const SessionManager = @import("session_manager.zig");
+const Auth = @import("authenticator.zig");
 const User = @import("users.zig").User;
 const Template = @import("template.zig");
 
@@ -82,14 +82,14 @@ pub fn main() !void {
         defer user_endpoint.deinit();
 
         // create authenticator
-        const Authenticator = SessionManager.Authenticator(UserEndpoint.UserEndpoint(MovieEndpoint, Context), SessionEndpoint, Context);
-        const auth_settings = SessionManager.AuthenticatorSettings{
+        const Authenticator = Auth.Authenticator(UserEndpoint.UserEndpoint(MovieEndpoint, Context), SessionEndpoint, Context);
+        const auth_settings = Auth.AuthenticatorSettings{
             .name_param = "name",
             .subject_param = "email",
             .password_param = "password",
-            .signin_url = "/sessions",
-            .signup_url = "/sessions",
+            .whitelist = &[_][]const u8{ "/sessions", "/oauth2/google/redirect", "/oauth2/github/redirect" },
             .success_url = "/users",
+            .failure_url = "/sessions",
             .signin_callback = "/sessions",
             .signup_callback = "/users",
             .cookie_name = "token",

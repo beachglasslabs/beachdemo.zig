@@ -5,9 +5,9 @@ pub const AuthenticatorSettings = struct {
     name_param: []const u8,
     subject_param: []const u8,
     password_param: []const u8,
-    signin_url: []const u8, // login page
-    signup_url: []const u8, // register page
-    success_url: []const u8, // login page
+    whitelist: []const []const u8,
+    success_url: []const u8, // redirect if successful
+    failure_url: []const u8, // redirect if failed
     signin_callback: []const u8, // the api endpoint for start a new session
     signup_callback: []const u8, // the api endpoint for adding a new user
     cookie_name: []const u8,
@@ -84,9 +84,9 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                     .name_param = try allocator.dupe(u8, settings.name_param),
                     .subject_param = try allocator.dupe(u8, settings.subject_param),
                     .password_param = try allocator.dupe(u8, settings.password_param),
-                    .signin_url = try allocator.dupe(u8, settings.signin_url),
-                    .signup_url = try allocator.dupe(u8, settings.signup_url),
+                    .whitelist = settings.whitelist,
                     .success_url = try allocator.dupe(u8, settings.success_url),
+                    .failure_url = try allocator.dupe(u8, settings.failure_url),
                     .signin_callback = try allocator.dupe(u8, settings.signin_callback),
                     .signup_callback = try allocator.dupe(u8, settings.signup_callback),
                     .cookie_name = try allocator.dupe(u8, settings.cookie_name),
@@ -106,9 +106,8 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
             self.allocator.free(self.settings.name_param);
             self.allocator.free(self.settings.subject_param);
             self.allocator.free(self.settings.password_param);
-            self.allocator.free(self.settings.signin_url);
-            self.allocator.free(self.settings.signup_url);
             self.allocator.free(self.settings.success_url);
+            self.allocator.free(self.settings.failure_url);
             self.allocator.free(self.settings.signin_callback);
             self.allocator.free(self.settings.signup_callback);
             self.allocator.free(self.settings.cookie_name);
@@ -120,8 +119,8 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
         }
 
         fn redirectFailure(self: *Self, r: *const zap.SimpleRequest) !void {
-            std.debug.print("redirect failure: {s}\n", .{self.settings.signin_url});
-            try r.redirectTo(self.settings.signin_url, self.settings.redirect_code);
+            std.debug.print("redirect failure: {s}\n", .{self.settings.failure_url});
+            try r.redirectTo(self.settings.failure_url, self.settings.redirect_code);
         }
 
         pub fn registerUser(self: *Self, _: *const zap.SimpleRequest, name: []const u8, subject: []const u8, password: []const u8) bool {
@@ -182,6 +181,8 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                     defer cookie.deinit();
                     // locked or unlocked token lookup
                     std.debug.print("login.session: cookie {s}\n", .{cookie.str});
+                    self.token_lock.lock();
+                    defer self.token_lock.unlock();
                     if (self.session_tokens.contains(cookie.str)) {
                         // cookie is a valid session!
                         std.debug.print("login.session: COOKIE IS OK!!!: {s}\n", .{cookie.str});
@@ -260,9 +261,13 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
             if (r.path) |p| {
                 if (r.method) |m| {
                     std.debug.print("internal.authenticate: {s}.{s}\n", .{ m, p });
-                    if (eql(u8, m, "GET") and (eql(u8, p, s.signup_url) or eql(u8, p, s.signin_url))) {
-                        std.debug.print("internal.authenticateRequest: signin or signup page\n", .{});
-                        return .Handled;
+                    if (eql(u8, m, "GET")) {
+                        for (self.settings.whitelist) |url| {
+                            if (std.mem.eql(u8, p, url)) {
+                                std.debug.print("internal.authenticateRequest: whitelisted {s}\n", .{p});
+                                return .Handled;
+                            }
+                        }
                     }
 
                     // parse body
