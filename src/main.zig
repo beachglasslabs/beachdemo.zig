@@ -7,6 +7,7 @@ const Router = @import("router.zig");
 const EndpointRouter = @import("endpoint_router.zig");
 const Auth = @import("authenticator.zig");
 const User = @import("users.zig").User;
+const Session = @import("sessions.zig").Session;
 const Template = @import("template.zig");
 
 // just a way to share our allocator via callback
@@ -30,6 +31,7 @@ const SharedAllocator = struct {
 // create a combined context struct
 const Context = zap.Middleware.MixContexts(.{
     .{ .name = "?user", .type = User },
+    .{ .name = "?session", .type = Session },
 });
 
 // we create a Handler type based on our Context
@@ -59,6 +61,28 @@ pub fn main() !void {
         var allocator = gpa.allocator();
         SharedAllocator.init(allocator);
 
+        // read config
+        const file = try std.fs.cwd().openFile("env.oauth.json", .{});
+        defer file.close();
+
+        const size = (try file.stat()).size;
+
+        const source = try file.reader().readAllAlloc(allocator, size);
+        defer allocator.free(source);
+
+        const OauthConfig = struct { name: []const u8, version: []const u8, providers: struct {
+            google: struct {
+                id: []const u8,
+                secret: []const u8,
+            },
+            github: struct {
+                id: []const u8,
+                secret: []const u8,
+            },
+        } };
+        var config = try std.json.parseFromSlice(OauthConfig, allocator, source, .{});
+        defer std.json.parseFree(OauthConfig, allocator, config);
+
         // setup routes
         var router = try Router.Router(Context).init(allocator);
         defer router.deinit();
@@ -83,11 +107,11 @@ pub fn main() !void {
 
         // create authenticator
         const Authenticator = Auth.Authenticator(UserEndpoint.UserEndpoint(MovieEndpoint, Context), SessionEndpoint, Context);
-        const auth_settings = Auth.AuthenticatorSettings{
+        const auth_settings = Auth.AuthSettings{
             .name_param = "name",
             .subject_param = "email",
             .password_param = "password",
-            .whitelist = &[_][]const u8{ "/sessions", "/oauth2/google/redirect", "/oauth2/github/redirect" },
+            .whitelist = &[_][]const u8{"/sessions"},
             .success_url = "/users",
             .failure_url = "/sessions",
             .signin_callback = "/sessions",
@@ -96,7 +120,18 @@ pub fn main() !void {
             .cookie_maxage = 1337,
             .redirect_code = zap.StatusCode.see_other,
         };
-        var authenticator = try Authenticator.init(allocator, &user_endpoint, &session_endpoint, auth_settings);
+        const oauth_settings = Auth.OauthSettings{
+            .google_redirect = "/oauth2/google/redirect",
+            .github_redirect = "/oauth2/github/redirect",
+            .google_callback = "/oauth2/google/callback",
+            .github_callback = "/oauth2/github/callback",
+            .google_client_id = config.providers.google.id,
+            .google_client_secret = config.providers.google.secret,
+            .github_client_id = config.providers.github.id,
+            .github_client_secret = config.providers.github.secret,
+        };
+
+        var authenticator = try Authenticator.init(allocator, &user_endpoint, &session_endpoint, auth_settings, oauth_settings);
         defer authenticator.deinit();
 
         // create authenticating endpoint
