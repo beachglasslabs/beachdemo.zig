@@ -46,7 +46,8 @@ pub const providers = struct {
     pub var google = Provider{
         .id = "google",
         .auth_url = "https://accounts.google.com/o/oauth2/v2/auth",
-        .token_url = "https://www.googleapis.com/oauth2/v4/token",
+        //.token_url = "https://www.googleapis.com/oauth2/v4/token",
+        .token_url = "https://oauth2.googleapis.com/token",
         .user_url = "https://www.googleapis.com/oauth2/v3/userinfo",
         .scope = "profile",
         .name_prop = "name",
@@ -61,6 +62,11 @@ pub const UserInfo = struct {
 
 pub const TokenInfo = struct {
     access_token: []const u8,
+    expires_in: u32,
+    refresh_token: []const u8,
+    scope: []const u8,
+    token_type: []const u8,
+    id_token: []const u8,
 };
 
 pub fn providerById(name: string) !?Provider {
@@ -101,6 +107,7 @@ pub fn OauthProvider(comptime T: type) type {
         pub fn deinit(_: *const Self) void {}
 
         pub fn redirect(self: *const Self, r: *const zap.SimpleRequest, state: []const u8) !void {
+            std.debug.print("oauth2.redirect: {s} got called\n", .{self.client.provider.id});
             const provider = self.client.provider;
             var params = Params.init(self.allocator);
             defer params.deinit();
@@ -109,8 +116,12 @@ pub fn OauthProvider(comptime T: type) type {
             defer self.allocator.free(redirect_uri);
             try params.add("redirect_uri", redirect_uri);
             try params.add("scope", provider.scope);
-            try params.add("access_type", "offline");
-            try params.add("response_type", "code");
+            if (std.mem.eql(u8, self.client.provider.id, "google")) {
+                try params.add("access_type", "offline");
+                try params.add("response_type", "code");
+            } else {
+                try params.add("allow_signup", "yes");
+            }
             try params.add("state", state);
             var output = try params.encode();
             defer self.allocator.free(output);
@@ -134,14 +145,15 @@ pub fn OauthProvider(comptime T: type) type {
 
                             var params = Params.init(self.allocator);
                             defer params.deinit();
+                            try params.add("code", code.str);
                             try params.add("client_id", self.client.id);
                             try params.add("client_secret", self.client.secret);
-                            try params.add("grant_type", "authorization_code");
-                            try params.add("code", code.str);
                             var redirect_uri = try std.fmt.allocPrint(self.allocator, "http://localhost:3000{s}", .{self.callback_url});
                             defer self.allocator.free(redirect_uri);
                             try params.add("redirect_uri", redirect_uri);
-                            try params.add("state", state.str);
+                            if (std.mem.eql(u8, self.client.provider.id, "google")) {
+                                try params.add("grant_type", "authorization_code");
+                            }
 
                             var output = try params.encode();
                             defer self.allocator.free(output);
@@ -159,13 +171,12 @@ pub fn OauthProvider(comptime T: type) type {
                             };
                             defer headers.deinit();
 
+                            if (std.mem.eql(u8, self.client.provider.id, "google")) {
+                                try headers.append("Content-Type", "application/x-www-form-urlencoded");
+                            } else {
+                                try headers.append("Content-Type", "application/json");
+                            }
                             try headers.append("Content-Type", "application/x-www-form-urlencoded");
-                            var client_secret = try std.mem.join(self.allocator, ":", &.{ self.client.id, self.client.secret });
-                            defer self.allocator.free(client_secret);
-                            const auth_header = try std.fmt.allocPrint(self.allocator, "Basic {s}", .{self.client.secret});
-                            defer self.allocator.free(auth_header);
-                            std.debug.print("oauth2.callback: auth:{s}\n", .{auth_header});
-                            try headers.append("Authorization", auth_header);
                             try headers.append("Accept", "application/json");
                             const length_header = try std.fmt.allocPrint(self.allocator, "{d}", .{output.len});
                             defer self.allocator.free(length_header);
@@ -209,7 +220,7 @@ pub fn OauthProvider(comptime T: type) type {
                             };
                             defer headers2.deinit();
 
-                            var auth_header2 = try std.fmt.allocPrint(self.allocator, "Bearer {s}", .{token.access_token});
+                            var auth_header2 = try std.fmt.allocPrint(self.allocator, "{s} {s}", .{ token.token_type, token.access_token });
                             defer self.allocator.free(auth_header2);
                             try headers2.append("Authorization", auth_header2);
                             try headers2.append("Accept", "application/json");
