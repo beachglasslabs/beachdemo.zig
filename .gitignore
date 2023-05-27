@@ -33,3 +33,4 @@ public/*.css
 
 # env file with secrets
 .env
+env.oauth.json

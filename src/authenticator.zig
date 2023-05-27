@@ -198,7 +198,8 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
             _ = r.getUserContext(Context);
             std.debug.print("saveInfo: provider={s}\n", .{provider_id});
             std.debug.print("saveInfo: state={s}\n", .{state});
-            std.debug.print("saveInfo: email={s}\n", .{userinfo.email});
+            std.debug.print("saveInfo: name={s}\n", .{userinfo.name.?});
+            std.debug.print("saveInfo: email={s}\n", .{userinfo.email.?});
             var name: []const u8 = undefined;
             if (userinfo.name) |maybe_name| {
                 name = maybe_name;

@@ -177,7 +177,7 @@ pub fn main() !void {
 
         // start worker threads
         zap.start(.{
-            .threads = 2,
+            .threads = 5,
             // IMPORTANT! It is crucial to only have a single worker for this example to work!
             // Multiple workers would have multiple copies of the users hashmap.
             //
