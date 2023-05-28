@@ -196,23 +196,19 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
 
         pub fn saveInfo(allocator: std.mem.Allocator, r: *const zap.SimpleRequest, provider_id: []const u8, state: []const u8, userinfo: Oauth.UserInfo) !void {
             _ = r.getUserContext(Context);
-            std.debug.print("saveInfo: provider={s}\n", .{provider_id});
+            var sub: []const u8 = undefined;
+            if (userinfo.email) |email| {
+                sub = try allocator.dupe(u8, email);
+            } else {
+                if (userinfo.login) |login| {
+                    sub = try std.fmt.allocPrint(allocator, "{s}@{s}", .{ login, provider_id });
+                } else return; // no unique name, can't create account
+            }
+            var name = userinfo.name orelse sub;
             std.debug.print("saveInfo: state={s}\n", .{state});
-            std.debug.print("saveInfo: name={s}\n", .{userinfo.name.?});
-            std.debug.print("saveInfo: email={s}\n", .{userinfo.email.?});
-            var name: []const u8 = "";
-            var email: []const u8 = "";
-            if (userinfo.name) |maybe_name| {
-                name = maybe_name;
-            } else if (userinfo.login) |maybe_name| {
-                name = maybe_name;
-            }
-            if (userinfo.email) |maybe_email| {
-                email = maybe_email;
-            }
-            defer allocator.free(name);
-            defer allocator.free(email);
-            std.debug.print("saveInfo: email:{s} name:{s}\n", .{ email, name });
+            std.debug.print("saveInfo: sub={s}\n", .{sub});
+            std.debug.print("saveInfo: name={s}\n", .{name});
+            defer allocator.free(sub);
         }
 
         fn redirectSuccess(self: *Self, r: *const zap.SimpleRequest) !void {

@@ -62,7 +62,7 @@ pub const UserInfo = struct {
 
 pub const TokenInfo = struct {
     access_token: []const u8,
-    token_type: ?[]const u8 = null,
+    token_type: []const u8,
 };
 
 pub fn providerById(name: string) !?Provider {
@@ -115,7 +115,7 @@ pub fn OauthProvider(comptime T: type) type {
             if (std.mem.eql(u8, self.client.provider.id, "google")) {
                 try params.add("access_type", "offline");
                 try params.add("response_type", "code");
-            } else {
+            } else if (std.mem.eql(u8, self.client.provider.id, "github")) {
                 try params.add("allow_signup", "yes");
             }
             try params.add("state", state);
@@ -141,11 +141,15 @@ pub fn OauthProvider(comptime T: type) type {
 
                             const token = try self.getTokenInfo(code.str);
                             defer self.allocator.free(token.access_token);
-                            defer self.allocator.free(token.token_type.?);
+                            defer self.allocator.free(token.token_type);
                             std.debug.print("oauth2.callback: got access token:{s}\n", .{token.access_token});
 
                             const user = try self.getUserInfo(token);
-                            std.debug.print("oauth2.callback: got user info:{s}\n", .{user.email.?});
+                            if (user.email) |email| {
+                                std.debug.print("oauth2.callback: got user info:{s}\n", .{email});
+                            } else {
+                                std.debug.print("oauth2.callback: got user info:{s}\n", .{user.login.?});
+                            }
 
                             std.debug.print("oauth2.callback: calling saveInfo with state {s}:\n", .{state.str});
                             try T.saveInfo(self.allocator, r, self.client.provider.id, state.str, user);
@@ -190,11 +194,7 @@ pub fn OauthProvider(comptime T: type) type {
             };
             defer headers.deinit();
 
-            if (std.mem.eql(u8, self.client.provider.id, "google")) {
-                try headers.append("Content-Type", "application/x-www-form-urlencoded");
-            } else {
-                try headers.append("Content-Type", "application/json");
-            }
+            try headers.append("Content-Type", "application/x-www-form-urlencoded");
             try headers.append("Accept", "application/json");
             //const length_header = try std.fmt.allocPrint(self.allocator, "{d}", .{output.len});
             //defer self.allocator.free(length_header);
@@ -204,7 +204,8 @@ pub fn OauthProvider(comptime T: type) type {
             var req = try client.request(.POST, uri, headers, .{});
             defer req.deinit();
 
-            req.transfer_encoding = .chunked;
+            //req.transfer_encoding = std.http.Client.RequestTransfer{ .content_length = output.len };
+            req.transfer_encoding = .{ .content_length = output.len };
 
             std.debug.print("oauth2.token: starting request\n", .{});
             try req.start();
@@ -222,7 +223,7 @@ pub fn OauthProvider(comptime T: type) type {
 
             std.debug.print("oauth2.token: got reply\n", .{});
             // read the entire response body
-            const body = req.reader().readAllAlloc(self.allocator, 1024 * 64) catch unreachable;
+            const body = req.reader().readAllAlloc(self.allocator, 1024 * 2) catch unreachable;
             defer self.allocator.free(body);
 
             std.debug.print("oauth2.token: body:{s}\n", .{body});
@@ -234,7 +235,7 @@ pub fn OauthProvider(comptime T: type) type {
 
             return .{
                 .access_token = try self.allocator.dupe(u8, token.access_token),
-                .token_type = if (token.token_type) |tt| try self.allocator.dupe(u8, tt) else null,
+                .token_type = try self.allocator.dupe(u8, token.token_type),
             };
         }
 
@@ -252,16 +253,17 @@ pub fn OauthProvider(comptime T: type) type {
             };
             defer headers.deinit();
 
-            var auth_header = try std.fmt.allocPrint(self.allocator, "{s} {s}", .{ token.token_type orelse "Bearer", token.access_token });
+            var auth_header = try std.fmt.allocPrint(self.allocator, "Bearer {s}", .{token.access_token});
             defer self.allocator.free(auth_header);
             std.debug.print("oauth2.callback: auth header:{s}\n", .{auth_header});
             try headers.append("Authorization", auth_header);
-            try headers.append("Accept", "application/json");
+            //try headers.append("Accept", "application/json");
+            try headers.append("Connection", "close");
 
             var req = try client.request(.GET, uri, headers, .{});
             defer req.deinit();
 
-            req.transfer_encoding = .chunked;
+            //req.transfer_encoding = .chunked;
 
             std.debug.print("oauth2.user: starting userinfo request\n", .{});
             try req.start();
@@ -269,7 +271,7 @@ pub fn OauthProvider(comptime T: type) type {
             std.debug.print("oauth2.user: waiting for userinfo\n", .{});
             try req.wait();
 
-            const body = req.reader().readAllAlloc(self.allocator, 1024 * 64) catch unreachable;
+            const body = req.reader().readAllAlloc(self.allocator, 1024 * 2) catch unreachable;
             defer self.allocator.free(body);
             std.debug.print("oauth2.user: got userinfo:{s}\n", .{body});
             const user = try std.json.parseFromSlice(UserInfo, self.allocator, body, .{
