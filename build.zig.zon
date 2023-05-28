@@ -3,11 +3,11 @@
     .version = "0.0.2",
 
     .dependencies = .{
-        // zap v0.1.2-pre
+        // zap v0.1.4-pre
         .zap = .{
-            .url = "https://github.com/zigzap/zap/archive/refs/tags/v0.1.2-pre.tar.gz",
-            //.url = "http://localhost:8000/v0.1.2-pre.tar.gz",
-            .hash = "1220fd222f2f0ddcd3dbc50fae56a8be337002c1fd54e73a5ca67c379ab8955a5a02",
+            //.url = "http://localhost:8000/v0.1.4-pre.tar.gz",
+            .url = "https://github.com/zigzap/zap/archive/refs/tags/v0.1.4-pre.tar.gz.bha",
+            .hash = "12204613bae513282f2b7e468045401cbae09bb19e42baeca193b9c98ff6f2ceb6ef",
         }
     }
 }

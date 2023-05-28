@@ -113,7 +113,7 @@ pub fn OauthProvider(comptime T: type) type {
             try params.add("redirect_uri", redirect_uri);
             try params.add("scope", provider.scope);
             if (std.mem.eql(u8, self.client.provider.id, "google")) {
-                try params.add("access_type", "online");
+                try params.add("access_type", "offline");
                 try params.add("response_type", "code");
             } else {
                 try params.add("allow_signup", "yes");
@@ -139,110 +139,16 @@ pub fn OauthProvider(comptime T: type) type {
                             defer code.deinit();
                             std.debug.print("oauth2.callback: code:{s}\n", .{code.str});
 
-                            var params = Params.init(self.allocator);
-                            defer params.deinit();
-                            try params.add("code", code.str);
-                            try params.add("client_id", self.client.id);
-                            try params.add("client_secret", self.client.secret);
-                            var redirect_uri = try std.fmt.allocPrint(self.allocator, "http://localhost:3000{s}", .{self.callback_url});
-                            defer self.allocator.free(redirect_uri);
-                            try params.add("redirect_uri", redirect_uri);
-                            if (std.mem.eql(u8, self.client.provider.id, "google")) {
-                                try params.add("grant_type", "authorization_code");
-                            }
-
-                            var output = try params.encode();
-                            defer self.allocator.free(output);
-                            std.debug.print("oauth2.callback: params:{s}\n", .{output});
-
-                            var client = std.http.Client{
-                                .allocator = self.allocator,
-                            };
-                            defer client.deinit();
-
-                            var uri = try std.Uri.parse(self.client.provider.token_url);
-
-                            var headers = std.http.Headers{
-                                .allocator = self.allocator,
-                            };
-                            defer headers.deinit();
-
-                            if (std.mem.eql(u8, self.client.provider.id, "google")) {
-                                try headers.append("Content-Type", "application/x-www-form-urlencoded");
-                            } else {
-                                try headers.append("Content-Type", "application/json");
-                            }
-                            try headers.append("Content-Type", "application/x-www-form-urlencoded");
-                            try headers.append("Accept", "application/json");
-                            const length_header = try std.fmt.allocPrint(self.allocator, "{d}", .{output.len});
-                            defer self.allocator.free(length_header);
-                            try headers.append("Content-Length", length_header);
-
-                            // make the connection and set up the request
-                            var req = try client.request(.POST, uri, headers, .{});
-                            defer req.deinit();
-
-                            std.debug.print("oauth2.callback: starting request\n", .{});
-
-                            try req.start();
-
-                            // write the params in the body
-                            std.debug.print("oauth2.callback: writing request\n", .{});
-                            _ = try req.writer().writeAll(output);
-
-                            std.debug.print("oauth2.callback: finishing request\n", .{});
-                            try req.finish();
-
-                            // wait for server to send us a response
-                            std.debug.print("oauth2.callback: waiting for response\n", .{});
-                            try req.wait();
-
-                            std.debug.print("oauth2.callback: got reply\n", .{});
-                            // read the entire response body
-                            const body = req.reader().readAllAlloc(self.allocator, 1024 * 64) catch unreachable;
-                            defer self.allocator.free(body);
-
-                            std.debug.print("oauth2.callback: body:{s}\n", .{body});
-
-                            const token = try std.json.parseFromSlice(TokenInfo, self.allocator, body, .{
-                                .ignore_unknown_fields = true,
-                            });
-                            defer std.json.parseFree(TokenInfo, self.allocator, token);
-
+                            const token = try self.getTokenInfo(code.str);
+                            defer self.allocator.free(token.access_token);
+                            defer self.allocator.free(token.token_type.?);
                             std.debug.print("oauth2.callback: got access token:{s}\n", .{token.access_token});
 
-                            uri = try std.Uri.parse(self.client.provider.user_url);
-
-                            var headers2 = std.http.Headers{
-                                .allocator = self.allocator,
-                            };
-                            defer headers2.deinit();
-
-                            var auth_header2 = try std.fmt.allocPrint(self.allocator, "{s} {s}", .{ token.token_type orelse "Bearer", token.access_token });
-                            defer self.allocator.free(auth_header2);
-                            std.debug.print("oauth2.callback: auth header:{s}\n", .{auth_header2});
-                            try headers2.append("Authorization", auth_header2);
-                            try headers2.append("Accept", "application/json");
-
-                            var req2 = try client.request(.GET, uri, headers2, .{});
-                            defer req2.deinit();
-
-                            try req2.start();
-                            try req2.finish();
-
-                            std.debug.print("oauth2.callback: waiting for userinfo\n", .{});
-                            try req2.wait();
-                            const body2 = req2.reader().readAllAlloc(self.allocator, 1024 * 64) catch unreachable;
-                            defer self.allocator.free(body2);
-                            std.debug.print("oauth2.callback: got userinfo:{s}\n", .{body2});
-                            const user = try std.json.parseFromSlice(UserInfo, self.allocator, body2, .{
-                                .ignore_unknown_fields = true,
-                            });
-                            defer std.json.parseFree(UserInfo, self.allocator, user);
-                            std.debug.print("oauth2.callback: user.name:{s}\n", .{user.name.?});
+                            const user = try self.getUserInfo(token);
+                            std.debug.print("oauth2.callback: got user info:{s}\n", .{user.email.?});
 
                             std.debug.print("oauth2.callback: calling saveInfo with state {s}:\n", .{state.str});
-                            try T.saveInfo(r, self.client.provider.id, state.str, user);
+                            try T.saveInfo(self.allocator, r, self.client.provider.id, state.str, user);
                         }
                     } else |err| {
                         std.debug.print("oauth2.callback: getParamStr(state) failed: {}", .{err});
@@ -252,6 +158,130 @@ pub fn OauthProvider(comptime T: type) type {
                 std.debug.print("oauth2.callback: getParamStr(code) failed: {}", .{err});
             }
             try r.redirectTo(self.success_url, .found);
+        }
+
+        fn getTokenInfo(self: *const Self, code: []const u8) !TokenInfo {
+            std.debug.print("oauth2.callback: getting token info\n", .{});
+            var client = std.http.Client{
+                .allocator = self.allocator,
+            };
+            defer client.deinit();
+
+            // setup request parameters
+            var params = Params.init(self.allocator);
+            defer params.deinit();
+            try params.add("code", code);
+            try params.add("client_id", self.client.id);
+            try params.add("client_secret", self.client.secret);
+            var redirect_uri = try std.fmt.allocPrint(self.allocator, "http://localhost:3000{s}", .{self.callback_url});
+            defer self.allocator.free(redirect_uri);
+            try params.add("redirect_uri", redirect_uri);
+            if (std.mem.eql(u8, self.client.provider.id, "google")) {
+                try params.add("grant_type", "authorization_code");
+            }
+            var output = try params.encode();
+            defer self.allocator.free(output);
+            std.debug.print("oauth2.token: params:{s}\n", .{output});
+
+            var uri = try std.Uri.parse(self.client.provider.token_url);
+
+            var headers = std.http.Headers{
+                .allocator = self.allocator,
+            };
+            defer headers.deinit();
+
+            if (std.mem.eql(u8, self.client.provider.id, "google")) {
+                try headers.append("Content-Type", "application/x-www-form-urlencoded");
+            } else {
+                try headers.append("Content-Type", "application/json");
+            }
+            try headers.append("Accept", "application/json");
+            //const length_header = try std.fmt.allocPrint(self.allocator, "{d}", .{output.len});
+            //defer self.allocator.free(length_header);
+            //try headers.append("Content-Length", length_header);
+
+            // make the connection and set up the request
+            var req = try client.request(.POST, uri, headers, .{});
+            defer req.deinit();
+
+            req.transfer_encoding = .chunked;
+
+            std.debug.print("oauth2.token: starting request\n", .{});
+            try req.start();
+
+            // write the params in the body
+            std.debug.print("oauth2.token: writing request\n", .{});
+            _ = try req.writer().writeAll(output);
+
+            std.debug.print("oauth2.token: finishing request\n", .{});
+            try req.finish();
+
+            // wait for server to send us a response
+            std.debug.print("oauth2.token: waiting for response\n", .{});
+            try req.wait();
+
+            std.debug.print("oauth2.token: got reply\n", .{});
+            // read the entire response body
+            const body = req.reader().readAllAlloc(self.allocator, 1024 * 64) catch unreachable;
+            defer self.allocator.free(body);
+
+            std.debug.print("oauth2.token: body:{s}\n", .{body});
+
+            const token = try std.json.parseFromSlice(TokenInfo, self.allocator, body, .{
+                .ignore_unknown_fields = true,
+            });
+            defer std.json.parseFree(TokenInfo, self.allocator, token);
+
+            return .{
+                .access_token = try self.allocator.dupe(u8, token.access_token),
+                .token_type = if (token.token_type) |tt| try self.allocator.dupe(u8, tt) else null,
+            };
+        }
+
+        fn getUserInfo(self: *const Self, token: TokenInfo) !UserInfo {
+            std.debug.print("oauth2.user: getting user info\n", .{});
+            var client = std.http.Client{
+                .allocator = self.allocator,
+            };
+            defer client.deinit();
+
+            var uri = try std.Uri.parse(self.client.provider.user_url);
+
+            var headers = std.http.Headers{
+                .allocator = self.allocator,
+            };
+            defer headers.deinit();
+
+            var auth_header = try std.fmt.allocPrint(self.allocator, "{s} {s}", .{ token.token_type orelse "Bearer", token.access_token });
+            defer self.allocator.free(auth_header);
+            std.debug.print("oauth2.callback: auth header:{s}\n", .{auth_header});
+            try headers.append("Authorization", auth_header);
+            try headers.append("Accept", "application/json");
+
+            var req = try client.request(.GET, uri, headers, .{});
+            defer req.deinit();
+
+            req.transfer_encoding = .chunked;
+
+            std.debug.print("oauth2.user: starting userinfo request\n", .{});
+            try req.start();
+
+            std.debug.print("oauth2.user: waiting for userinfo\n", .{});
+            try req.wait();
+
+            const body = req.reader().readAllAlloc(self.allocator, 1024 * 64) catch unreachable;
+            defer self.allocator.free(body);
+            std.debug.print("oauth2.user: got userinfo:{s}\n", .{body});
+            const user = try std.json.parseFromSlice(UserInfo, self.allocator, body, .{
+                .ignore_unknown_fields = true,
+            });
+            defer std.json.parseFree(UserInfo, self.allocator, user);
+
+            return .{
+                .email = if (user.email) |v| try self.allocator.dupe(u8, v) else null,
+                .login = if (user.login) |v| try self.allocator.dupe(u8, v) else null,
+                .name = if (user.name) |v| try self.allocator.dupe(u8, v) else null,
+            };
         }
     };
 }
