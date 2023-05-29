@@ -1,6 +1,7 @@
 const std = @import("std");
 const zap = @import("zap");
 const Users = @import("users.zig");
+const uuid = @import("uuid.zig");
 const User = Users.User;
 const Template = @import("template.zig");
 
@@ -53,12 +54,8 @@ pub fn UserEndpoint(comptime MovieManager: type, comptime Context: anytype) type
             InvalidNameError,
         };
 
-        pub fn post(self: *Self, name: ?[]const u8, email: ?[]const u8, password: ?[]const u8) ![]const u8 {
-            const username = name orelse return error.InvalidNameError;
-            const usermail = email orelse return error.InvalidEmailError;
-            const userpass = password orelse return error.InvalidPasswordError;
-
-            return self.users.add(username, usermail, userpass);
+        pub fn post(self: *Self, name: []const u8, email: []const u8, password: []const u8) ![]const u8 {
+            return self.users.add(name, email, password);
         }
 
         pub fn getEndpoint(self: *Self) *zap.SimpleEndpoint {
