@@ -1,5 +1,6 @@
 const std = @import("std");
 const zap = @import("zap");
+const Uuid = @import("uuid.zig");
 const Oauth = @import("oauth2_provider.zig");
 
 pub const AuthSettings = struct {
@@ -195,31 +196,63 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
         }
 
         pub fn saveInfo(allocator: std.mem.Allocator, r: *const zap.SimpleRequest, provider_id: []const u8, state: []const u8, userinfo: Oauth.UserInfo) !void {
+            var sub: []const u8 = undefined;
+            var name: []const u8 = undefined;
+            var gotsub: bool = false;
+
             if (userinfo.email) |v| {
                 defer allocator.free(v);
+                std.debug.print("saveInfo: email:{s}\n", .{v});
+                sub = try allocator.dupe(u8, v);
+                gotsub = true;
             }
             if (userinfo.login) |v| {
                 defer allocator.free(v);
-            }
-            if (userinfo.name) |v| {
-                defer allocator.free(v);
-            }
-
-            _ = r.getUserContext(Context);
-
-            var sub: []const u8 = undefined;
-            if (userinfo.email) |email| {
-                sub = try allocator.dupe(u8, email);
-            } else {
-                if (userinfo.login) |login| {
-                    sub = try std.fmt.allocPrint(allocator, "{s}:{s}", .{ provider_id, login });
-                } else return; // no unique name, can't create account
+                std.debug.print("saveInfo: login:{s}\n", .{v});
+                if (!gotsub) {
+                    sub = try std.fmt.allocPrint(allocator, "{s}:{s}", .{ provider_id, v });
+                }
             }
             defer allocator.free(sub);
-            var name = userinfo.name orelse sub;
-            std.debug.print("saveInfo: state={s}\n", .{state});
+            if (userinfo.name) |v| {
+                defer allocator.free(v);
+                std.debug.print("saveInfo: name:{s}\n", .{v});
+                name = try allocator.dupe(u8, v);
+            } else {
+                name = try allocator.dupe(u8, sub);
+            }
+            defer allocator.free(name);
+
+            //if (!Self.oauth_tokens.contains(state)) {
+            //    return;
+            //}
+
+            // if state is not found, then the request is not legitimate
+            var session: OauthTokenMap = undefined;
+            if (r.getUserContext(Context)) |c| {
+                if (c.session) |s| {
+                    session = s;
+                    if (!session.contains(state)) {
+                        std.debug.print("saveInfo: session context didn't find state\n", .{});
+                        return;
+                    } // else fall through
+                } else {
+                    std.debug.print("saveInfo: null session context\n", .{});
+                    return;
+                }
+            } else {
+                std.debug.print("saveInfo: no session context\n", .{});
+                return;
+            }
+            std.debug.print("saveInfo: found state={s}\n", .{state});
+
             std.debug.print("saveInfo: sub={s}\n", .{sub});
             std.debug.print("saveInfo: name={s}\n", .{name});
+            if (session.getKeyPtr(state)) |k| {
+                const ks = k.*;
+                _ = session.remove(state);
+                allocator.free(ks);
+            }
         }
 
         fn redirectSuccess(self: *Self, r: *const zap.SimpleRequest) !void {
@@ -379,16 +412,18 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                         }
                         if (self.google) |google| {
                             if (std.mem.eql(u8, p, self.settings.google_redirect.?)) {
-                                std.debug.print("google.redirect: {s}\n", .{p});
-                                google.redirect(r, "blahblahblah") catch |err| {
-                                    std.debug.print("google.redirect: error {}\n", .{err});
+                                const state = std.fmt.allocPrint(self.allocator, "{s}", .{Uuid.newV4()}) catch return .AuthFailed;
+                                self.oauth_tokens.put(state, {}) catch return .AuthFailed;
+                                std.debug.print("google.redirect: {s}\n", .{state});
+                                google.redirect(r, state) catch |err| {
+                                    std.debug.print("google.redirect: {}\n", .{err});
                                     return .AuthFailed;
                                 };
                                 return .Handled;
                             } else if (std.mem.eql(u8, p, self.settings.google_callback.?)) {
                                 std.debug.print("google.callback: {s}\n", .{p});
                                 google.callback(r) catch |err| {
-                                    std.debug.print("google.redirect: error {}\n", .{err});
+                                    std.debug.print("google.callback: {}\n", .{err});
                                     return .AuthFailed;
                                 };
                                 return .Handled;
@@ -396,16 +431,18 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                         }
                         if (self.github) |github| {
                             if (std.mem.eql(u8, p, self.settings.github_redirect.?)) {
-                                std.debug.print("github.redirect: {s}\n", .{p});
-                                github.redirect(r, "blahblahblah") catch |err| {
-                                    std.debug.print("github.redirect: error {}\n", .{err});
+                                const state = std.fmt.allocPrint(self.allocator, "{s}", .{Uuid.newV4()}) catch return .AuthFailed;
+                                self.oauth_tokens.put(state, {}) catch return .AuthFailed;
+                                std.debug.print("github.redirect: {s}\n", .{state});
+                                github.redirect(r, state) catch |err| {
+                                    std.debug.print("github.redirect: {}\n", .{err});
                                     return .AuthFailed;
                                 };
                                 return .Handled;
                             } else if (std.mem.eql(u8, p, self.settings.github_callback.?)) {
                                 std.debug.print("github.callback: {s}\n", .{p});
                                 github.callback(r) catch |err| {
-                                    std.debug.print("github.redirect: error {}\n", .{err});
+                                    std.debug.print("github.callback: {}\n", .{err});
                                     return .AuthFailed;
                                 };
                                 return .Handled;
@@ -487,6 +524,10 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
         }
 
         pub fn authenticateRequest(self: *Self, r: *const zap.SimpleRequest) zap.AuthResult {
+            if (r.getUserContext(Context)) |c| {
+                c.session = self.oauth_tokens;
+                r.setUserContext(c);
+            }
             switch (self._internal_authenticate(r)) {
                 .AuthOK => {
                     std.debug.print("auth.authenticateRequest: returning .AuthOk\n", .{});
