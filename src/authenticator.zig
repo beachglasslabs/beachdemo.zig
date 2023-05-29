@@ -195,20 +195,31 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
         }
 
         pub fn saveInfo(allocator: std.mem.Allocator, r: *const zap.SimpleRequest, provider_id: []const u8, state: []const u8, userinfo: Oauth.UserInfo) !void {
+            if (userinfo.email) |v| {
+                defer allocator.free(v);
+            }
+            if (userinfo.login) |v| {
+                defer allocator.free(v);
+            }
+            if (userinfo.name) |v| {
+                defer allocator.free(v);
+            }
+
             _ = r.getUserContext(Context);
+
             var sub: []const u8 = undefined;
             if (userinfo.email) |email| {
                 sub = try allocator.dupe(u8, email);
             } else {
                 if (userinfo.login) |login| {
-                    sub = try std.fmt.allocPrint(allocator, "{s}@{s}", .{ login, provider_id });
+                    sub = try std.fmt.allocPrint(allocator, "{s}:{s}", .{ provider_id, login });
                 } else return; // no unique name, can't create account
             }
+            defer allocator.free(sub);
             var name = userinfo.name orelse sub;
             std.debug.print("saveInfo: state={s}\n", .{state});
             std.debug.print("saveInfo: sub={s}\n", .{sub});
             std.debug.print("saveInfo: name={s}\n", .{name});
-            defer allocator.free(sub);
         }
 
         fn redirectSuccess(self: *Self, r: *const zap.SimpleRequest) !void {

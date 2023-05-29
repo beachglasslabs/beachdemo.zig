@@ -201,7 +201,12 @@ pub fn OauthProvider(comptime T: type) type {
             //try headers.append("Content-Length", length_header);
 
             // make the connection and set up the request
-            var req = try client.request(.POST, uri, headers, .{});
+            var req: std.http.Client.Request = undefined;
+            if (std.mem.eql(u8, self.client.provider.id, "google")) {
+                req = try client.request(.POST, uri, headers, .{ .version = std.http.Version.@"HTTP/1.0" });
+            } else if (std.mem.eql(u8, self.client.provider.id, "github")) {
+                req = try client.request(.POST, uri, headers, .{});
+            } else unreachable;
             defer req.deinit();
 
             //req.transfer_encoding = std.http.Client.RequestTransfer{ .content_length = output.len };
@@ -257,13 +262,15 @@ pub fn OauthProvider(comptime T: type) type {
             defer self.allocator.free(auth_header);
             std.debug.print("oauth2.callback: auth header:{s}\n", .{auth_header});
             try headers.append("Authorization", auth_header);
-            //try headers.append("Accept", "application/json");
-            try headers.append("Connection", "close");
+            try headers.append("Accept", "application/json");
 
-            var req = try client.request(.GET, uri, headers, .{});
+            var req: std.http.Client.Request = undefined;
+            if (std.mem.eql(u8, self.client.provider.id, "google")) {
+                req = try client.request(.GET, uri, headers, .{ .version = std.http.Version.@"HTTP/1.0" });
+            } else if (std.mem.eql(u8, self.client.provider.id, "github")) {
+                req = try client.request(.GET, uri, headers, .{});
+            } else unreachable;
             defer req.deinit();
-
-            //req.transfer_encoding = .chunked;
 
             std.debug.print("oauth2.user: starting userinfo request\n", .{});
             try req.start();

@@ -49,13 +49,9 @@ pub fn encode(self: Self) ![]const u8 {
     var i: usize = 0;
     while (iter.next()) |entry| : (i += 1) {
         if (i > 0) try list.writer().writeAll("&");
-        if (std.mem.eql(u8, entry.key_ptr.*, "code")) {
-            try list.writer().print("{s}={s}", .{ entry.key_ptr.*, entry.value_ptr.* });
-        } else {
-            const value = try std.Uri.escapeString(alloc, entry.value_ptr.*);
-            defer alloc.free(value);
-            try list.writer().print("{s}={s}", .{ entry.key_ptr.*, value });
-        }
+        const value = try std.Uri.escapeString(alloc, entry.value_ptr.*);
+        defer alloc.free(value);
+        try list.writer().print("{s}={s}", .{ entry.key_ptr.*, value });
     }
     return list.toOwnedSlice();
 }
