@@ -126,7 +126,7 @@ pub fn OauthProvider(comptime T: type) type {
             try r.redirectTo(auth_url, .found);
         }
 
-        pub fn callback(self: *const Self, r: *const zap.SimpleRequest) !void {
+        pub fn callback(self: *const Self, r: *const zap.SimpleRequest, t: *T) !void {
             std.debug.print("oauth2.callback: {s} got called\n", .{self.client.provider.id});
             r.parseQuery();
 
@@ -152,7 +152,7 @@ pub fn OauthProvider(comptime T: type) type {
                             }
 
                             std.debug.print("oauth2.callback: calling saveInfo with state {s}:\n", .{state.str});
-                            try T.saveInfo(self.allocator, r, self.client.provider.id, state.str, user);
+                            try t.saveInfo(r, self.client.provider.id, state.str, user);
                         }
                     } else |err| {
                         std.debug.print("oauth2.callback: getParamStr(state) failed: {}", .{err});

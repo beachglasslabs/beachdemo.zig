@@ -195,33 +195,33 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
             self.allocator.free(self.settings.cookie_name);
         }
 
-        pub fn saveInfo(allocator: std.mem.Allocator, r: *const zap.SimpleRequest, provider_id: []const u8, state: []const u8, userinfo: Oauth.UserInfo) !void {
+        pub fn saveInfo(self: *Self, r: *const zap.SimpleRequest, provider_id: []const u8, state: []const u8, userinfo: Oauth.UserInfo) !void {
             var sub: []const u8 = undefined;
             var name: []const u8 = undefined;
             var gotsub: bool = false;
 
             if (userinfo.email) |v| {
-                defer allocator.free(v);
+                defer self.allocator.free(v);
                 std.debug.print("saveInfo: email:{s}\n", .{v});
-                sub = try allocator.dupe(u8, v);
+                sub = try self.allocator.dupe(u8, v);
                 gotsub = true;
             }
             if (userinfo.login) |v| {
-                defer allocator.free(v);
+                defer self.allocator.free(v);
                 std.debug.print("saveInfo: login:{s}\n", .{v});
                 if (!gotsub) {
-                    sub = try std.fmt.allocPrint(allocator, "{s}:{s}", .{ provider_id, v });
+                    sub = try std.fmt.allocPrint(self.allocator, "{s}:{s}", .{ provider_id, v });
                 }
             }
-            defer allocator.free(sub);
+            defer self.allocator.free(sub);
             if (userinfo.name) |v| {
-                defer allocator.free(v);
+                defer self.allocator.free(v);
                 std.debug.print("saveInfo: name:{s}\n", .{v});
-                name = try allocator.dupe(u8, v);
+                name = try self.allocator.dupe(u8, v);
             } else {
-                name = try allocator.dupe(u8, sub);
+                name = try self.allocator.dupe(u8, sub);
             }
-            defer allocator.free(name);
+            defer self.allocator.free(name);
 
             //if (!Self.oauth_tokens.contains(state)) {
             //    return;
@@ -232,6 +232,7 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
             if (r.getUserContext(Context)) |c| {
                 if (c.session) |s| {
                     session = s;
+                    std.debug.print("saveInfo: session has {d} states\n", .{session.count()});
                     if (!session.contains(state)) {
                         std.debug.print("saveInfo: session context didn't find state\n", .{});
                         return;
@@ -245,13 +246,14 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                 return;
             }
             std.debug.print("saveInfo: found state={s}\n", .{state});
+            std.debug.print("saveInfo: manager.session has {d} states\n", .{self.oauth_tokens.count()});
 
             std.debug.print("saveInfo: sub={s}\n", .{sub});
             std.debug.print("saveInfo: name={s}\n", .{name});
             if (session.getKeyPtr(state)) |k| {
                 const ks = k.*;
                 _ = session.remove(state);
-                allocator.free(ks);
+                self.allocator.free(ks);
             }
         }
 
@@ -422,7 +424,7 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                                 return .Handled;
                             } else if (std.mem.eql(u8, p, self.settings.google_callback.?)) {
                                 std.debug.print("google.callback: {s}\n", .{p});
-                                google.callback(r) catch |err| {
+                                google.callback(r, self) catch |err| {
                                     std.debug.print("google.callback: {}\n", .{err});
                                     return .AuthFailed;
                                 };
@@ -441,7 +443,7 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                                 return .Handled;
                             } else if (std.mem.eql(u8, p, self.settings.github_callback.?)) {
                                 std.debug.print("github.callback: {s}\n", .{p});
-                                github.callback(r) catch |err| {
+                                github.callback(r, self) catch |err| {
                                     std.debug.print("github.callback: {}\n", .{err});
                                     return .AuthFailed;
                                 };
