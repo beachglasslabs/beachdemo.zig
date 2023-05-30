@@ -13,9 +13,6 @@ pub const Provider = struct {
     token_url: string,
     user_url: string,
     scope: string = "",
-    name_prop: string,
-    name_prefix: string = "",
-    id_prop: string = "id",
 
     pub fn domain(self: Provider) string {
         if (std.mem.indexOfScalar(u8, self.id, ',')) |_| {
@@ -40,8 +37,6 @@ pub const providers = struct {
         .token_url = "https://github.com/login/oauth/access_token",
         .user_url = "https://api.github.com/user",
         .scope = "read:user",
-        .name_prop = "login",
-        .name_prefix = "@",
     };
     pub var google = Provider{
         .id = "google",
@@ -50,7 +45,6 @@ pub const providers = struct {
         .token_url = "https://oauth2.googleapis.com/token",
         .user_url = "https://www.googleapis.com/oauth2/v3/userinfo",
         .scope = "email profile",
-        .name_prop = "name",
     };
 };
 

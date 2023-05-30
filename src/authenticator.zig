@@ -231,6 +231,8 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
             // if state is not found, then the request is not legitimate
             if (r.getUserContext(Context)) |c| {
                 if (c.session) |*s| {
+                    self.oauth_lock.lock();
+                    defer self.oauth_lock.unlock();
                     std.debug.print("saveInfo: session has {d} states\n", .{s.count()});
                     if (s.fetchRemove(state)) |kv| {
                         std.debug.print("saveInfo: found state {s}\n", .{kv.key});
@@ -253,7 +255,7 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
             const pw = try std.fmt.allocPrint(self.allocator, "{s}", .{uuid.newV4()});
             defer self.allocator.free(pw);
             _ = self.registerUser(r, name, sub, pw);
-            _ = (self.loginUser(r, sub, pw));
+            _ = self.loginOauth(r, sub, state);
             return;
         }
 
@@ -310,6 +312,25 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                 } else {
                     std.debug.print("login.user: password didn't match\n", .{});
                 }
+            }
+
+            return false;
+        }
+
+        // return session token if successful, null otherwise
+        pub fn loginOauth(self: *Self, _: *const zap.SimpleRequest, subject: []const u8, token: []const u8) bool {
+            // now check
+            std.debug.print("login.oauth: {s}\n", .{subject});
+            if (self.users.getBySub(subject)) |user| {
+                // create session token
+                std.debug.print("login.oauth: found user {s} {s}\n", .{ user.email, user.id });
+
+                self.storeSessionToken(token, user.id) catch |err| {
+                    std.debug.print("login.oauth: session storage failed: {}\n", .{err});
+                    return false;
+                };
+                std.debug.print("login.oauth: session stored: {s}\n", .{token});
+                return true;
             }
 
             return false;
@@ -415,7 +436,20 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                         if (self.google) |google| {
                             if (std.mem.eql(u8, p, self.settings.google_redirect.?)) {
                                 const state = std.fmt.allocPrint(self.allocator, "{s}", .{uuid.newV4()}) catch return .AuthFailed;
+                                self.oauth_lock.lock();
+                                defer self.oauth_lock.unlock();
                                 self.oauth_tokens.put(state, {}) catch return .AuthFailed;
+                                std.debug.print("google.redirect: setting cookie {s}\n", .{state});
+                                // set cookie before redirect
+                                r.setCookie(.{
+                                    .name = self.settings.cookie_name,
+                                    .value = state,
+                                    .max_age_s = self.settings.cookie_maxage,
+                                    .path = "/",
+                                }) catch |err| {
+                                    std.debug.print("google.redirect: cookie setting failed: {}\n", .{err});
+                                    return .AuthFailed;
+                                };
                                 std.debug.print("google.redirect: {s}\n", .{state});
                                 google.redirect(r, state) catch |err| {
                                     std.debug.print("google.redirect: {}\n", .{err});
@@ -434,20 +468,33 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                         if (self.github) |github| {
                             if (std.mem.eql(u8, p, self.settings.github_redirect.?)) {
                                 const state = std.fmt.allocPrint(self.allocator, "{s}", .{uuid.newV4()}) catch return .AuthFailed;
+                                self.oauth_lock.lock();
+                                defer self.oauth_lock.unlock();
                                 self.oauth_tokens.put(state, {}) catch return .AuthFailed;
+                                // set cookie before redirect
+                                std.debug.print("github.redirect: setting cookie {s}\n", .{state});
+                                r.setCookie(.{
+                                    .name = self.settings.cookie_name,
+                                    .value = state,
+                                    .max_age_s = self.settings.cookie_maxage,
+                                    .path = "/",
+                                }) catch |err| {
+                                    std.debug.print("google.redirect: cookie setting failed: {}\n", .{err});
+                                    return .AuthFailed;
+                                };
                                 std.debug.print("github.redirect: {s}\n", .{state});
                                 github.redirect(r, state) catch |err| {
                                     std.debug.print("github.redirect: {}\n", .{err});
                                     return .AuthFailed;
                                 };
-                                return .AuthOK;
+                                return .Handled;
                             } else if (std.mem.eql(u8, p, self.settings.github_callback.?)) {
                                 std.debug.print("github.callback: {s}\n", .{p});
                                 github.callback(r, self) catch |err| {
                                     std.debug.print("github.callback: {}\n", .{err});
                                     return .AuthFailed;
                                 };
-                                return .AuthOK;
+                                return .Handled;
                             }
                         }
                     }
@@ -527,8 +574,10 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
 
         pub fn authenticateRequest(self: *Self, r: *const zap.SimpleRequest) zap.AuthResult {
             if (r.getUserContext(Context)) |c| {
-                c.session = self.oauth_tokens;
-                r.setUserContext(c);
+                if (c.session) |_| {} else {
+                    c.session = self.oauth_tokens;
+                    r.setUserContext(c);
+                }
             }
             switch (self._internal_authenticate(r)) {
                 .AuthOK => {
@@ -561,6 +610,19 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
             const token: Token = std.fmt.bytesToHex(digest, .lower);
             const token_str = try self.allocator.dupe(u8, token[0..token.len]);
             return token_str;
+        }
+
+        // called by oauth only
+        fn storeSessionToken(self: *Self, token: []const u8, userid: []const u8) !void {
+            // sessionid should not be freed as sessions will free it
+            const sessionid = try self.sessions.post(userid);
+            // token should be freed
+            self.session_lock.lock();
+            defer self.session_lock.unlock();
+            if (!self.session_tokens.contains(token)) {
+                std.debug.print("putting token={s}\n", .{token});
+                try self.session_tokens.put(try self.allocator.dupe(u8, token), sessionid);
+            }
         }
 
         fn createAndStoreSessionToken(self: *Self, subject: []const u8, userid: []const u8) ![]const u8 {
