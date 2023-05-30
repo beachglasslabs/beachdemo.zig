@@ -450,9 +450,6 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                                     std.debug.print("google.redirect: cookie setting failed: {}\n", .{err});
                                     return .AuthFailed;
                                 };
-                                const cookie_str = std.fmt.allocPrint(self.allocator, "{s}={s};Path=/;Max-Age={d}", .{ self.settings.cookie_name, state, self.settings.cookie_maxage }) catch return .AuthFailed;
-                                defer self.allocator.free(cookie_str);
-                                r.setHeader("Set-Cookie", cookie_str) catch return .AuthFailed;
                                 std.debug.print("google.redirect: {s}\n", .{state});
                                 google.redirect(r, state) catch |err| {
                                     std.debug.print("google.redirect: {}\n", .{err});
@@ -485,9 +482,6 @@ pub fn Authenticator(comptime UserManager: type, comptime SessionManager: type, 
                                     std.debug.print("google.redirect: cookie setting failed: {}\n", .{err});
                                     return .AuthFailed;
                                 };
-                                const cookie_str = std.fmt.allocPrint(self.allocator, "{s}={s};Path=/;Max-Age={d}", .{ self.settings.cookie_name, state, self.settings.cookie_maxage }) catch return .AuthFailed;
-                                defer self.allocator.free(cookie_str);
-                                r.setHeader("Set-Cookie", cookie_str) catch return .AuthFailed;
                                 std.debug.print("github.redirect: {s}\n", .{state});
                                 github.redirect(r, state) catch |err| {
                                     std.debug.print("github.redirect: {}\n", .{err});
