@@ -38,9 +38,9 @@ fn fetch_data(movies: *std.StringHashMap(Movie), a: std.mem.Allocator, filename:
     const movielist = try std.json.parseFromSlice([]const Movie, a, contents, .{
         .ignore_unknown_fields = true,
     });
-    defer std.json.parseFree([]const Movie, a, movielist);
+    defer movielist.deinit();
 
-    for (movielist) |m| {
+    for (movielist.value) |m| {
         var movie: Movie = undefined;
         movie.id = try std.fmt.allocPrint(a, "{s}", .{uuid.newV4()});
         movie.title = try a.dupe(u8, m.title);

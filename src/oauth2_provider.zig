@@ -230,11 +230,11 @@ pub fn OauthProvider(comptime T: type) type {
             const token = try std.json.parseFromSlice(TokenInfo, self.allocator, body, .{
                 .ignore_unknown_fields = true,
             });
-            defer std.json.parseFree(TokenInfo, self.allocator, token);
+            defer token.deinit();
 
             return .{
-                .access_token = try self.allocator.dupe(u8, token.access_token),
-                .token_type = try self.allocator.dupe(u8, token.token_type),
+                .access_token = try self.allocator.dupe(u8, token.value.access_token),
+                .token_type = try self.allocator.dupe(u8, token.value.token_type),
             };
         }
 
@@ -278,12 +278,12 @@ pub fn OauthProvider(comptime T: type) type {
             const user = try std.json.parseFromSlice(UserInfo, self.allocator, body, .{
                 .ignore_unknown_fields = true,
             });
-            defer std.json.parseFree(UserInfo, self.allocator, user);
+            defer user.deinit();
 
             return .{
-                .email = if (user.email) |v| try self.allocator.dupe(u8, v) else null,
-                .login = if (user.login) |v| try self.allocator.dupe(u8, v) else null,
-                .name = if (user.name) |v| try self.allocator.dupe(u8, v) else null,
+                .email = if (user.value.email) |v| try self.allocator.dupe(u8, v) else null,
+                .login = if (user.value.login) |v| try self.allocator.dupe(u8, v) else null,
+                .name = if (user.value.name) |v| try self.allocator.dupe(u8, v) else null,
             };
         }
     };

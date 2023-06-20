@@ -85,7 +85,7 @@ pub fn main() !void {
             },
         } };
         var config = try std.json.parseFromSlice(OauthConfig, allocator, source, .{});
-        defer std.json.parseFree(OauthConfig, allocator, config);
+        defer config.deinit();
 
         // setup routes
         var router = try Router.Router(Context).init(allocator);
@@ -129,10 +129,10 @@ pub fn main() !void {
             .github_redirect = "/oauth2/github/redirect",
             .google_callback = "/oauth2/google/callback",
             .github_callback = "/oauth2/github/callback",
-            .google_client_id = config.providers.google.id,
-            .google_client_secret = config.providers.google.secret,
-            .github_client_id = config.providers.github.id,
-            .github_client_secret = config.providers.github.secret,
+            .google_client_id = config.value.providers.google.id,
+            .google_client_secret = config.value.providers.google.secret,
+            .github_client_id = config.value.providers.github.id,
+            .github_client_secret = config.value.providers.github.secret,
         };
 
         var authenticator = try Authenticator.init(allocator, &user_endpoint, &session_endpoint, auth_settings, oauth_settings);
