@@ -75,7 +75,7 @@ pub fn get(self: *Self, id: []const u8) ?Movie {
 }
 
 pub fn random(self: *Self) ?Movie {
-    var rng = std.rand.DefaultPrng.init(@intCast(u64, std.time.timestamp()));
+    var rng = std.rand.DefaultPrng.init(@as(u64, @intCast(std.time.timestamp())));
     const r = rng.random();
 
     const n = r.uintLessThan(u32, self.movies.count());

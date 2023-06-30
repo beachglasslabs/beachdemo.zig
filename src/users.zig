@@ -47,7 +47,7 @@ pub const User = struct {
 };
 
 pub fn newAvatarImage() []const u8 {
-    var rng = std.rand.DefaultPrng.init(@intCast(u64, std.time.timestamp()));
+    var rng = std.rand.DefaultPrng.init(@as(u64, @intCast(std.time.timestamp())));
     const random = rng.random();
 
     const i = random.uintLessThan(u8, avatar_images.len);
