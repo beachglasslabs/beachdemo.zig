@@ -1,10 +1,10 @@
 {
-  "name": "beachtube",
+  "name": "beachdemo",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "scripts": {
-    "serve": "npm run build && zig-out/bin/beachtube",
+    "serve": "npm run build && zig-out/bin/beachdemo",
     "dev:css": "npm run build:css -- --watch",
     "build:css": "npx tailwindcss build -i web/css/main.css -o public/style.css",
     "zap": "python -m http.server --directory ~/download",

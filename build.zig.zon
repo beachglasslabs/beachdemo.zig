@@ -1,6 +1,6 @@
 .{
-    .name = "beachtube",
-    .version = "0.1.0",
+    .name = "beachdemo",
+    .version = "0.0.2",
 
     .dependencies = .{
         // zap v0.1.8-pre

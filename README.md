@@ -1,9 +1,9 @@
-# beachtube - youtube/netflix clone in ![zig](https://ziglang.org/img/zig-logo-dynamic.svg)
+# beachdemo.zig - netflix clone in ![zig](https://ziglang.org/img/zig-logo-dynamic.svg)
 
 This is meant to be a technical exploration of various technologies to be used in our actual decentralized video streaming app.
 
-![login](https://raw.githubusercontent.com/beachglasslabs/beachtube/master/screenshots/beachtube-login.jpg)
-![main](https://raw.githubusercontent.com/beachglasslabs/beachtube/master/screenshots/beachtube-screen.jpg)
+![login](https://raw.githubusercontent.com/beachglasslabs/beachdemo.zig/master/screenshots/beachdemo-login.jpg)
+![main](https://raw.githubusercontent.com/beachglasslabs/beachdemo.zig/master/screenshots/beachdemo-screen.jpg)
 
 This particular project is written in ZAX (Zig/Zap Alpinejs htmX :stuck_out_tongue_winking_eye:):
  * This is the rewrite of an earlier [rewrite](https://github.com/beachglasslabs/beachdemo.jl) written in [Juila](https://julia.org):
@@ -14,7 +14,7 @@ This particular project is written in ZAX (Zig/Zap Alpinejs htmX :stuck_out_tong
  * The users and sessions are ephemeral to remove the dependency on Mongodb Atlas in the [original](https://github.com/edyu/netflix-clone) version.
 
 To test it out:
- 1. `git clone git@github.com:beachglasslabs/beachtube.git`
+ 1. `git clone git@github.com:beachglasslabs/beachdemo.zig.git`
  2. `npm install` to install npm packages
  3. `cp env.oauth.sample.json env.oauth.json` and then optionally fill out the oauth2 information from [github](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps) and [google](https://developers.google.com/identity/protocols/oauth2)
  4. `npm run dev` to start the server
