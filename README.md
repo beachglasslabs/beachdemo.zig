@@ -5,7 +5,7 @@ This is meant to be a technical exploration of various technologies to be used i
 ![login](https://raw.githubusercontent.com/beachglasslabs/beachtube/master/screenshots/beachtube-login.jpg)
 ![main](https://raw.githubusercontent.com/beachglasslabs/beachtube/master/screenshots/beachtube-screen.jpg)
 
-This particular project are written in ZAX (Zig/Zap Alpinejs htmX :stuck_out_tongue_winking_eye:):
+This particular project is written in ZAX (Zig/Zap Alpinejs htmX :stuck_out_tongue_winking_eye:):
  * This is the rewrite of an earlier [rewrite](https://github.com/beachglasslabs/beachdemo.jl) written in [Juila](https://julia.org):
  * The original UI is based on a great video tutorial I found on [Youtube](https://github.com/AntonioErdeljac/next-netflix-tutorial) and you can find my own [nextjs](https://nextjs.org) version [here](https://github.com/edyu/netflix-clone).
  * I rewrote the UI to be based on [HTMX](https://htmx.org) and [Alpinejs](https://alpinejs.dev) instead of the original [next.js](https://nextjs.org).
