@@ -1,12 +1,12 @@
 .{
     .name = "beachdemo",
-    .version = "0.0.2",
+    .version = "0.0.3",
 
     .dependencies = .{
-        // zap v0.1.8-pre
+        // zap v0.1.10-pre
         .zap = .{
-            .url = "https://github.com/zigzap/zap/archive/refs/tags/v0.1.8-pre.tar.gz",
-            .hash = "1220e30645c293c943dccc9d4394f7088679cf0969c63a7f4b23f72e375744123729",
+            .url = "https://github.com/zigzap/zap/archive/refs/tags/v0.1.10-pre.tar.gz",
+            .hash = "1220a645e8ae84064f3342609f65d1c97e23c292616f5d1040cdf314ca52d7643f8a",
         },
     },
 }
